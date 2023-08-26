@@ -3,13 +3,17 @@
 
  
 
-The network architecture is customized and is largely based on [Autoencoder]() and [ConvNeXt](https://arxiv.org/abs/2201.03545). In this work, the encoder is based on ConvNeXt-T and has around 30M parameters, and the decoder structure is the reversed counterpart. The latent space dimension is 768. The network was trained on 4 A100 for 100 epochs.
+The network architecture is customized and is largely based on [Autoencoder]() and [ConvNeXt](https://arxiv.org/abs/2201.03545). In this work, the encoder is based on ConvNeXt-T and has around 30M parameters, and the decoder structure is the reversed counterpart. The latent space dimension is 768. The network was trained on 4 A100 for 200 epochs.
 
 This work is mostly for practice and demo purpose. Ablation studies wait to be done to explore the complexity-performance trade-off. 
 
 Environment: Python3.9 + requirements.txt 
 
 ## 1. Results
+
+Here are a few examples of restored handwriting images.
+![Restoration Example](./example-images/summarizedRestore.png)
+
 
 ## 2. Training
 
