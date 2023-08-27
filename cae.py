@@ -3,6 +3,7 @@ import torch.nn as nn
 from convnext import ConvNeXt, RevConvNext
 from timm.models import register_model
 from torchsummary import summary
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -16,7 +17,9 @@ class CAE(nn.Module):
         self.fc_latent2 = self.dims[-1]
 
         self.encoder = ConvNeXt(in_chans=2, depths=self.depth, dims=self.dims)
-        self.decoder = RevConvNext(in_chans=768, depths=self.depth, dims=self.dims[::-1])
+        self.decoder = RevConvNext(
+            in_chans=768, depths=self.depth, dims=self.dims[::-1]
+        )
         # only flip the channel number for blocks
         self.pool_fc = nn.Linear(768, self.latent_size)
         self.de_fc1 = nn.Linear(self.latent_size, self.fc_latent2)

@@ -3,30 +3,55 @@ import torch
 from timm.data import Mixup
 from timm.utils import ModelEma
 from typing import Iterable, Optional
-import nn_utils
+from utils import nn_utils
 
-def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
-                    data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
-                    model_ema: Optional[ModelEma] = None, mixup_fn: Optional[Mixup] = None, log_writer=None,
-                    wandb_logger=None, start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
-                    num_training_steps_per_epoch=None, update_freq=None, use_amp=False):
+
+def train_one_epoch(
+    model: torch.nn.Module,
+    criterion: torch.nn.Module,
+    data_loader: Iterable,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    epoch: int,
+    loss_scaler,
+    max_norm: float = 0,
+    model_ema: Optional[ModelEma] = None,
+    mixup_fn: Optional[Mixup] = None,
+    log_writer=None,
+    wandb_logger=None,
+    start_steps=None,
+    lr_schedule_values=None,
+    wd_schedule_values=None,
+    num_training_steps_per_epoch=None,
+    update_freq=None,
+    use_amp=False,
+):
     model.train(True)
     metric_logger = nn_utils.MetricLogger(delimiter="   ")
-    metric_logger.add_meter('lr', nn_utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('min_lr', nn_utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
+    metric_logger.add_meter(
+        "lr", nn_utils.SmoothedValue(window_size=1, fmt="{value:.6f}")
+    )
+    metric_logger.add_meter(
+        "min_lr", nn_utils.SmoothedValue(window_size=1, fmt="{value:.6f}")
+    )
+    header = "Epoch: [{}]".format(epoch)
     print_freq = 10
 
     optimizer.zero_grad()
 
-    for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (samples, targets) in enumerate(
+        metric_logger.log_every(data_loader, print_freq, header)
+    ):
 
         step = data_iter_step // update_freq
         if step >= num_training_steps_per_epoch:
             continue
         it = start_steps + step  # global training interation
-        if lr_schedule_values is not None or wd_schedule_values is not None and data_iter_step % update_freq ==0:
+        if (
+            lr_schedule_values is not None
+            or wd_schedule_values is not None
+            and data_iter_step % update_freq == 0
+        ):
             for i, param_group in enumerate(optimizer.param_groups):
                 if lr_schedule_values is not None:
                     param_group["lr"] = lr_schedule_values[it] * param_group["lr_scale"]
@@ -53,11 +78,18 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             assert math.isfinite(loss_value)
 
         if use_amp:
-            is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+            is_second_order = (
+                hasattr(optimizer, "is_second_order") and optimizer.is_second_order
+            )
             loss /= update_freq
-            grad_norm = loss_scaler(loss, optimizer, clip_grad=max_norm,
-                                    parameters=model.parameters(), create_graph=is_second_order,
-                                    update_grad=(data_iter_step + 1) % update_freq == 0)
+            grad_norm = loss_scaler(
+                loss,
+                optimizer,
+                clip_grad=max_norm,
+                parameters=model.parameters(),
+                create_graph=is_second_order,
+                update_grad=(data_iter_step + 1) % update_freq == 0,
+            )
             if (data_iter_step + 1) % update_freq == 0:
                 optimizer.zero_grad()
                 if model_ema is not None:
@@ -100,14 +132,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             log_writer.set_step()
 
         if wandb_logger:
-            wandb_logger._wandb.log({
-                'Rank-0 Batch Wise/train_loss': loss_value,
-                'Rank-0 Batch Wise/train_max_lr': max_lr,
-                'Rank-0 Batch Wise/train_min_lr': min_lr
-            }, commit=False)
+            wandb_logger._wandb.log(
+                {
+                    "Rank-0 Batch Wise/train_loss": loss_value,
+                    "Rank-0 Batch Wise/train_max_lr": max_lr,
+                    "Rank-0 Batch Wise/train_min_lr": min_lr,
+                },
+                commit=False,
+            )
             if use_amp:
-                wandb_logger._wandb.log({'Rank-0 Batch Wise/train_grad_norm': grad_norm}, commit=False)
-            wandb_logger._wandb.log({'Rank-0 Batch Wise/global_train_step': it})
+                wandb_logger._wandb.log(
+                    {"Rank-0 Batch Wise/train_grad_norm": grad_norm}, commit=False
+                )
+            wandb_logger._wandb.log({"Rank-0 Batch Wise/global_train_step": it})
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -120,7 +157,7 @@ def evaluate(data_loader, model, device, use_amp=False):
     criterion = torch.nn.MSELoss()
 
     metric_logger = nn_utils.MetricLogger(delimiter="  ")
-    header = 'Test:'
+    header = "Test:"
 
     # switch to evaluation mode
     model.eval()
@@ -142,7 +179,5 @@ def evaluate(data_loader, model, device, use_amp=False):
         metric_logger.update(loss=loss.item())
 
     metric_logger.synchronize_between_processes()
-    print('*  loss {losses.global_avg:.3f}'.format(losses=metric_logger.loss))
+    print("*  loss {losses.global_avg:.3f}".format(losses=metric_logger.loss))
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
