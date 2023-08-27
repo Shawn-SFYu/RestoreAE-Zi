@@ -1,3 +1,11 @@
+"""
+Implement methods for image painting
+erosion_dilation
+rect_painting
+poly_painting
+blur
+add_noise
+"""
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt

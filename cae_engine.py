@@ -1,11 +1,8 @@
 import math
 import torch
 from timm.data import Mixup
-from timm.utils import accuracy, ModelEma
+from timm.utils import ModelEma
 from typing import Iterable, Optional
-from IPython.core.debugger import set_trace
-import pdb
-
 import nn_utils
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -28,8 +25,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         step = data_iter_step // update_freq
         if step >= num_training_steps_per_epoch:
             continue
-        it = start_steps + step # global training interation
-        # update LR & WD for the first acc
+        it = start_steps + step  # global training interation
         if lr_schedule_values is not None or wd_schedule_values is not None and data_iter_step % update_freq ==0:
             for i, param_group in enumerate(optimizer.param_groups):
                 if lr_schedule_values is not None:
@@ -47,8 +43,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 output = model(samples)
                 loss = criterion(output, targets)
         else:
-            # print(f"samples shape {samples.shape}")
-            # print(f"targets shape {targets.shape}")
             output = model(samples)
             loss = criterion(output, targets)
 
@@ -76,20 +70,10 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 optimizer.zero_grad()
                 if model_ema is not None:
                     model_ema.update(model)
-        """
-        for name, param in model.named_parameters():
-            if param.grad is None:
-                print(name)
-        """
+
         torch.cuda.synchronize()
-        """
-        if mixup_fn is None:
-            class_acc = (output.max(-1)[-1] == targets).float().mean()
-        else:
-            class_acc = None
-        """
+
         metric_logger.update(loss=loss_value)
-        # metric_logger.update(class_acc=class_acc)
         min_lr = 10
         max_lr = 0
         for group in optimizer.param_groups:
@@ -108,7 +92,6 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
         if log_writer is not None:
             log_writer.update(loss=loss_value, head="loss")
-            # log_writer.update(class_acc=class_acc, head="loss")
             log_writer.update(lr=max_lr, head="opt")
             log_writer.update(min_lr=min_lr, head="opt")
             log_writer.update(weight_decay=weight_decay_value, head="opt")
@@ -122,19 +105,19 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 'Rank-0 Batch Wise/train_max_lr': max_lr,
                 'Rank-0 Batch Wise/train_min_lr': min_lr
             }, commit=False)
-            # if class_acc:
-            #    wandb_logger._wandb.log({'Rank-0 Batch Wise/train_class_acc': class_acc}, commit=False)
             if use_amp:
                 wandb_logger._wandb.log({'Rank-0 Batch Wise/train_grad_norm': grad_norm}, commit=False)
             wandb_logger._wandb.log({'Rank-0 Batch Wise/global_train_step': it})
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
+
 @torch.no_grad()
 def evaluate(data_loader, model, device, use_amp=False):
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.MSELoss()
 
     metric_logger = nn_utils.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -148,7 +131,6 @@ def evaluate(data_loader, model, device, use_amp=False):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
-        # compute output
         if use_amp:
             with torch.cuda.amp.autocast():
                 output = model(images)
@@ -157,18 +139,10 @@ def evaluate(data_loader, model, device, use_amp=False):
             output = model(images)
             loss = criterion(output, target)
 
-        # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-        batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
-        # metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-        # metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
-    # gather the stats from all processes
+
     metric_logger.synchronize_between_processes()
     print('*  loss {losses.global_avg:.3f}'.format(losses=metric_logger.loss))
-    #print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
-    #      .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
-
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 

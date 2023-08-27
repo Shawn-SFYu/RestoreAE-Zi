@@ -1,25 +1,88 @@
-import argparse
 import os
 import os.path
-import numpy as np
+
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
-import torch
-import torchvision
-import matplotlib.pyplot as plt
+
+import random
 from PIL import Image
-from torchvision import datasets
+import argparse
+import matplotlib.pyplot as plt
+import numpy as np
+
+import torch
+import torchvision.utils
+from torchvision import datasets, transforms
+from torch.utils.data import TensorDataset, random_split
 from torchvision.transforms import ToTensor
 from torchvision.datasets.folder import IMG_EXTENSIONS, DatasetFolder
+
+from painting_methods import img_processing_pool
 from gen_base_img import char2img
-from denoise_dataset_classification import get_args_parser, build_transform
 
 img2tensor = ToTensor()
+
+
+class PaintingTransform(object):
+    def __init__(self, steps=3):
+        self.step = steps
+
+    def __call__(self, img):
+        # Apply your custom transformation to the input image
+        img_array = np.array(img)
+        chosen_functions = random.sample(img_processing_pool, k=self.step)
+        for processing in chosen_functions:
+            img_array = processing(img_array)
+        return Image.fromarray(img_array, mode='L')
+
+
+def build_dataset(args):
+    transform = build_transform(step=3)
+    """
+    print("Transform = ")
+    if isinstance(transform, tuple):
+        for trans in transform:
+            print(" - - - - - - - - - - ")
+            for t in trans.transforms:
+                print(t)
+    else:
+        for t in transform.transforms:
+            print(t)
+    print("---------------------------")
+    """
+    if args.data_set == "image_folder":
+        root = args.data_path
+        dataset = datasets.ImageFolder(root, transform=transform)
+        nb_classes = args.nb_classes
+        assert len(dataset.class_to_idx) == nb_classes
+    else:
+        raise NotImplementedError()
+    print("Number of the class = %d" % nb_classes)
+
+    return dataset, nb_classes
+
+
+def build_transform(step=3):
+    painting = PaintingTransform(step)
+    t = [transforms.Grayscale(), painting, transforms.ToTensor()]
+    return transforms.Compose(t)
+
+
+def get_args_parser():
+    parser = argparse.ArgumentParser('Denoise dataset module', add_help=False)
+    parser.add_argument('--data_set', default='image_folder', type=str)
+    parser.add_argument('--data_path', default='DicData', type=str)
+    parser.add_argument('--eval_data_path', default='DicData', type=str)
+    parser.add_argument('--nb_classes', default=3751, type=int)
+    # there is a mismatch in num of classes, 3751 vs 3753, resolved
+    return parser
+
 
 def pil_loader(path: str) -> Image.Image:
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, "rb") as f:
         img = Image.open(f)
         return img.convert('L')
+
 
 class DenoiseFolder(DatasetFolder):
     """A generic data loader where the images are arranged in this way by default: ::
@@ -66,7 +129,6 @@ class DenoiseFolder(DatasetFolder):
             target_transform=target_transform,  # default None
             is_valid_file=is_valid_file,
         )
-        # self.imgs = self.samples # samples (list): List of (sample path, class_index) tuples
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -81,12 +143,13 @@ class DenoiseFolder(DatasetFolder):
         character = os.path.basename(os.path.dirname(path))
         original = self.loader(path)  # original image
         if self.transform is not None:
-            noised = self.transform(original) # remove 255 *
+            noised = self.transform(original)  # remove 255 *
             noised = np.array(noised, np.float32).squeeze()
         standard = np.array(char2img(character, cvt_traditional=True), dtype=np.float32) / 255  # remove 255
         sample = np.stack((noised, standard), axis=0)
         sample = torch.from_numpy(sample)
-        original = img2tensor(original)  # torch.squeeze(img2tensor(original))  # torch.squeeze((255 * img2tensor(original)).to(torch.uint8))
+        original = img2tensor(
+            original)  # torch.squeeze(img2tensor(original))  # torch.squeeze((255 * img2tensor(original)).to(torch.uint8))
 
         return sample, original
 
@@ -96,18 +159,6 @@ class DenoiseFolder(DatasetFolder):
 
 def build_dataset(args):
     transform = build_transform(step=3)
-    """
-    print("Transform = ")
-    if isinstance(transform, tuple):
-        for trans in transform:
-            print(" - - - - - - - - - - ")
-            for t in trans.transforms:
-                print(t)
-    else:
-        for t in transform.transforms:
-            print(t)
-    print("---------------------------")
-    """
     if args.data_set == "image_folder":
         root = args.data_path
         dataset = DenoiseFolder(root, transform=transform)
@@ -120,7 +171,7 @@ def build_dataset(args):
     return dataset, nb_classes
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     parser = argparse.ArgumentParser('Denoise Dataset', parents=[get_args_parser()])
     args = parser.parse_args()
     dataset, args.nb_classes = build_dataset(args=args)

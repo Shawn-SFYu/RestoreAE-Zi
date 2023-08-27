@@ -3,17 +3,12 @@ import datetime
 import numpy as np
 import time
 import torch
-import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import json
 import os
 from cae import CAE
 
 from pathlib import Path
-
-from timm.data.mixup import Mixup
-from timm.models import create_model
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import ModelEma
 from optim_factory import create_optimizer, LayerDecayValueAssigner
 
@@ -22,25 +17,8 @@ from cae_engine import train_one_epoch, evaluate
 
 from nn_utils import NativeScalerWithGradNormCount as NativeScaler
 import nn_utils
-import cae
 from denoise_dataset import build_dataset
 
-# import models.convnext
-# import models.convnext_isotropic
-
-def str2bool(v):
-    """
-    Converts string to bool type; enables command line
-    arguments in the format of '--arg1 true --arg2 false'
-    """
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 def get_args_parser():
     parser = argparse.ArgumentParser('ConvNeXt training and evaluation script for image classification', add_help=False)
@@ -55,12 +33,11 @@ def get_args_parser():
                         help='Name of model to train')
     parser.add_argument('--latent_size', default=512, type=int,
                         help='Latent space size for CAE')
-
     # EMA related parameters
-    parser.add_argument('--model_ema', type=str2bool, default=False)
+    parser.add_argument('--model_ema', type=bool, default=False)
     parser.add_argument('--model_ema_decay', type=float, default=0.9999, help='')
-    parser.add_argument('--model_ema_force_cpu', type=str2bool, default=False, help='')
-    parser.add_argument('--model_ema_eval', type=str2bool, default=False, help='Using ema to eval during training.')
+    parser.add_argument('--model_ema_force_cpu', type=bool, default=False, help='')
+    parser.add_argument('--model_ema_eval', type=bool, default=False, help='Using ema to eval during training.')
 
     # Optimization parameters
     parser.add_argument('--opt', default='adamw', type=str, metavar='OPTIMIZER',
@@ -89,37 +66,13 @@ def get_args_parser():
     parser.add_argument('--warmup_steps', type=int, default=-1, metavar='N',
                         help='num of steps to warmup LR, will overload warmup_epochs if set > 0')
 
-    # Evaluation parameters
-    parser.add_argument('--crop_pct', type=float, default=None)
-
-    # * Random Erase params
-    parser.add_argument('--reprob', type=float, default=0.25, metavar='PCT',
-                        help='Random erase prob (default: 0.25)')
-    parser.add_argument('--remode', type=str, default='pixel',
-                        help='Random erase mode (default: "pixel")')
-    parser.add_argument('--recount', type=int, default=1,
-                        help='Random erase count (default: 1)')
-    parser.add_argument('--resplit', type=str2bool, default=False,
-                        help='Do not random erase first (clean) augmentation split')
-
-    # * Finetuning params
-    parser.add_argument('--finetune', default='',
-                        help='finetune from checkpoint')
-    parser.add_argument('--head_init_scale', default=1.0, type=float,
-                        help='classifier head initial scale, typically adjusted in fine-tuning')
-    parser.add_argument('--model_key', default='model|module', type=str,
-                        help='which key to load from saved state dict, usually model or model_ema')
-    parser.add_argument('--model_prefix', default='', type=str)
-
     # Dataset parameters
-    
     parser.add_argument('--data_path', default='./DicData', type=str,
                         help='dataset path')
     parser.add_argument('--eval_data_path', default=None, type=str,
                         help='dataset path for evaluation')
     parser.add_argument('--nb_classes', default=3751, type=int,
                         help='number of the classification types')
-    # parser.add_argument('--imagenet_default_mean_and_std', type=str2bool, default=True)
     parser.add_argument('--data_set', default='image_folder', choices=['CIFAR', 'IMNET', 'image_folder'],
                         type=str, help='ImageNet dataset path')
     parser.add_argument('--output_dir', default='',
@@ -128,48 +81,48 @@ def get_args_parser():
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
-    parser.add_argument('--seed', default=0, type=int)    
-    
+    parser.add_argument('--seed', default=0, type=int)
     
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
-    parser.add_argument('--auto_resume', type=str2bool, default=True)
-    parser.add_argument('--save_ckpt', type=str2bool, default=True)
+    parser.add_argument('--auto_resume', type=bool, default=True)
+    parser.add_argument('--save_ckpt', type=bool, default=True)
     parser.add_argument('--save_ckpt_freq', default=1, type=int)
     parser.add_argument('--save_ckpt_num', default=3, type=int)
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
-    parser.add_argument('--eval', type=str2bool, default=False,
+    parser.add_argument('--eval', type=bool, default=False,
                         help='Perform evaluation only')
-    parser.add_argument('--dist_eval', type=str2bool, default=True,
+    parser.add_argument('--dist_eval', type=bool, default=True,
                         help='Enabling distributed evaluation')
-    parser.add_argument('--disable_eval', type=str2bool, default=True,
+    parser.add_argument('--disable_eval', type=bool, default=True,
                         help='Disabling evaluation during training')
     parser.add_argument('--num_workers', default=10, type=int)
-    parser.add_argument('--pin_mem', type=str2bool, default=True,
+    parser.add_argument('--pin_mem', type=bool, default=True,
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=4, type=int,
                         help='number of distributed processes')
     parser.add_argument('--local_rank', default=-1, type=int)
-    parser.add_argument('--dist_on_itp', type=str2bool, default=False)
+    parser.add_argument('--dist_on_itp', type=bool, default=False)
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
 
-    parser.add_argument('--use_amp', type=str2bool, default=False,
+    parser.add_argument('--use_amp', type=bool, default=False,
                         help="Use PyTorch's AMP (Automatic Mixed Precision) or not")
 
     # Weights and Biases arguments
-    parser.add_argument('--enable_wandb', type=str2bool, default=False,
+    parser.add_argument('--enable_wandb', type=bool, default=False,
                         help="enable logging to Weights and Biases")
     parser.add_argument('--project', default='convnext', type=str,
                         help="The name of the W&B project where you're sending the new run.")
-    parser.add_argument('--wandb_ckpt', type=str2bool, default=False,
+    parser.add_argument('--wandb_ckpt', type=bool, default=False,
                         help="Save model checkpoints as W&B Artifacts.")
 
     return parser
+
 
 def main(args):
     nn_utils.init_distributed_mode(args)
@@ -182,14 +135,12 @@ def main(args):
     np.random.seed(seed)
     cudnn.benchmark = True
 
-
     dataset_train, args.nb_classes = build_dataset(args=args)
     if args.disable_eval:
         args.dist_eval = False
         dataset_val = None
     else:
         dataset_val, _ = build_dataset(args=args)
-    
 
     num_tasks = nn_utils.get_world_size()
     global_rank = nn_utils.get_rank()
@@ -240,29 +191,6 @@ def main(args):
         data_loader_val = None
 
     model = CAE(args.latent_size)
-
-    if args.finetune:
-        if args.finetune.startswith('https'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                args.finetune, map_location='cpu', check_hash=True)
-        else:
-            checkpoint = torch.load(args.finetune, map_location='cpu')
-
-        print("Load ckpt from %s" % args.finetune)
-        checkpoint_model = None
-        for model_key in args.model_key.split('|'):
-            if model_key in checkpoint:
-                checkpoint_model = checkpoint[model_key]
-                print("Load state_dict by model_key = %s" % model_key)
-                break
-        if checkpoint_model is None:
-            checkpoint_model = checkpoint
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-        nn_utils.load_state_dict(model, checkpoint_model, prefix=args.model_prefix)
     model.to(device)
 
     model_ema = None
@@ -324,15 +252,7 @@ def main(args):
     wd_schedule_values = nn_utils.cosine_scheduler(
         args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
     print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
-    """
-    if mixup_fn is not None:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing > 0.:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
-    """
+
     criterion = torch.nn.MSELoss()
     print("criterion = %s" % str(criterion))
 
@@ -343,12 +263,12 @@ def main(args):
     if args.eval:
         print(f"Eval only mode")
         test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
-        print(f"Accuracy of the network on {len(dataset_val)} test images: {test_stats['acc1']:.5f}%")
+        print(f"Loss of the network on {len(dataset_val)} test images: {test_stats['loss']:.5f}%")
         return
 
-    max_accuracy = 0.0
+    min_loss = np.Inf
     if args.model_ema and args.model_ema_eval:
-        max_accuracy_ema = 0.0
+        min_loss_ema = 0.0
 
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
@@ -376,18 +296,16 @@ def main(args):
                     loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
         if data_loader_val is not None:
             test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
-            print(f"Accuracy of the model on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            if max_accuracy < test_stats["acc1"]:
-                max_accuracy = test_stats["acc1"]
+            print(f"Loss of the model on the {len(dataset_val)} test images: {test_stats['loss']:.4f}%")
+            if min_loss > test_stats["loss"]:
+                min_loss = test_stats["loss"]
                 if args.output_dir and args.save_ckpt:
                     nn_utils.save_model(
                         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                         loss_scaler=loss_scaler, epoch="best", model_ema=model_ema)
-            print(f'Max accuracy: {max_accuracy:.2f}%')
+            print(f'Min loss: {min_loss:.2f}%')
 
             if log_writer is not None:
-                log_writer.update(test_acc1=test_stats['acc1'], head="perf", step=epoch)
-                log_writer.update(test_acc5=test_stats['acc5'], head="perf", step=epoch)
                 log_writer.update(test_loss=test_stats['loss'], head="perf", step=epoch)
 
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -398,16 +316,16 @@ def main(args):
             # repeat testing routines for EMA, if ema eval is turned on
             if args.model_ema and args.model_ema_eval:
                 test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
-                print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
-                if max_accuracy_ema < test_stats_ema["acc1"]:
-                    max_accuracy_ema = test_stats_ema["acc1"]
+                print(f"Loss of the model EMA on {len(dataset_val)} test images: {test_stats_ema['loss']:.4f}%")
+                if min_loss_ema < test_stats_ema["loss"]:
+                    min_loss_ema = test_stats_ema["loss"]
                     if args.output_dir and args.save_ckpt:
                         nn_utils.save_model(
                             args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                             loss_scaler=loss_scaler, epoch="best-ema", model_ema=model_ema)
-                    print(f'Max EMA accuracy: {max_accuracy_ema:.2f}%')
+                    print(f'Min EMA loss: {min_loss_ema:.4f}%')
                 if log_writer is not None:
-                    log_writer.update(test_acc1_ema=test_stats_ema['acc1'], head="perf", step=epoch)
+                    log_writer.update(test_loss_ema=test_stats_ema['loss'], head="perf", step=epoch)
                 log_stats.update({**{f'test_{k}_ema': v for k, v in test_stats_ema.items()}})
         else:
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -426,10 +344,10 @@ def main(args):
     if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
         wandb_logger.log_checkpoints()
 
-
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Denoise CAE training and evaluation script', parents=[get_args_parser()])
