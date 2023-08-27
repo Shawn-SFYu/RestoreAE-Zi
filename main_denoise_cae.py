@@ -13,7 +13,7 @@ from optim_factory import create_optimizer, LayerDecayValueAssigner
 
 from cae import CAE
 from cae_engine import train_one_epoch, evaluate
-from denoise_dataset import build_dataset
+from restore_dataset import build_dataset
 from utils import nn_utils
 from utils.nn_utils import NativeScalerWithGradNormCount as NativeScaler
 
