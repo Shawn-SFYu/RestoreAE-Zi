@@ -11,7 +11,7 @@ This work is mostly for demo purpose. More comprehensive data preparation and ab
 Environment: Python3.9 + requirements.txt 
 
 ## Project Background (if you are interested)
-Ancient inscriptions, spanning hundreds or even thousands of years, often bear the marks of additional noise and defects resulting from natural erosion or deliberate damage. This is part of my efforts to restore inscriptions/ancient hand writings employing machine learning techniques. As an example, the left panel is the digitized image of a character (Zi) extracted from an inscription (普觉国师碑). The historical inscription dates back to approximately 1289 during the Southern Song Dynasty and is featured by the calligraphy style of Xizhi Wang(王羲之集字). The middle panel is the contemporary standard writing, and the right one is the restored version generated from the digitized inscription using this neural network.
+Ancient inscriptions, spanning hundreds or even thousands of years, often bear the marks of additional noise and defects resulting from natural erosion or deliberate damage. This is part of my efforts to restore inscriptions and ancient hand writings employing machine learning techniques. As an example, the left panel is the digitized image of a character (Zi) extracted from an inscription (普觉国师碑). The historical inscription dates back to approximately 1289 during the Southern Song Dynasty and is featured by the calligraphy style of Xizhi Wang(王羲之集字). The middle panel is the contemporary standard writing, and the right one is the restored version generated from the digitized inscription using this neural network.
 
 ![Example Xizhi's handwriting](./example-images/xizhi-example.png)
 
