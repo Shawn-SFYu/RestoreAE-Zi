@@ -111,11 +111,8 @@ class ConvNeXt(nn.Module):
             cur += depths[i]
 
         self.norm = nn.LayerNorm(dims[-1], eps=1e-6)  # final norm layer
-        # self.head = nn.Linear(dims[-1], num_classes)
 
         self.apply(self._init_weights)
-        # self.head.weight.data.mul_(head_init_scale)
-        # self.head.bias.data.mul_(head_init_scale)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
@@ -131,19 +128,6 @@ class ConvNeXt(nn.Module):
         )  # global average pooling, (N, C, H, W) -> (N, C)
 
 
-model_urls = {
-    "convnext_tiny_1k": "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
-    "convnext_small_1k": "https://dl.fbaipublicfiles.com/convnext/convnext_small_1k_224_ema.pth",
-    "convnext_base_1k": "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth",
-    "convnext_large_1k": "https://dl.fbaipublicfiles.com/convnext/convnext_large_1k_224_ema.pth",
-    "convnext_tiny_22k": "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_22k_224.pth",
-    "convnext_small_22k": "https://dl.fbaipublicfiles.com/convnext/convnext_small_22k_224.pth",
-    "convnext_base_22k": "https://dl.fbaipublicfiles.com/convnext/convnext_base_22k_224.pth",
-    "convnext_large_22k": "https://dl.fbaipublicfiles.com/convnext/convnext_large_22k_224.pth",
-    "convnext_xlarge_22k": "https://dl.fbaipublicfiles.com/convnext/convnext_xlarge_22k_224.pth",
-}
-
-
 class RevConvNext(nn.Module):
     def __init__(
         self,
@@ -154,14 +138,6 @@ class RevConvNext(nn.Module):
         layer_scale_init_value=1e-6,
     ):
         super().__init__()
-        """
-        self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
-        stem = nn.Sequential(
-            nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
-            LayerNorm(dims[0], eps=1e-6, data_format="channels_first")
-        )
-        self.downsample_layers.append(stem)
-        """
         self.upsample_layers = nn.ModuleList()
         stem = nn.Sequential(
             nn.ConvTranspose2d(in_chans, dims[0], kernel_size=7, groups=in_chans),
@@ -172,7 +148,6 @@ class RevConvNext(nn.Module):
             upsample_layer = nn.Sequential(
                 LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
                 nn.ConvTranspose2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
-                # nn.Conv2d(dims[i], dims[i+1], kernel_size=2, stride=2),
             )
             self.upsample_layers.append(upsample_layer)
 
@@ -220,12 +195,7 @@ class RevConvNext(nn.Module):
             self.stages.append(stage)
             cur += depths[i]
 
-        # self.norm = nn.LayerNorm(dims[-1], eps=1e-6) # final norm layer
-        # self.head = nn.Linear(dims[-1], num_classes)
-
         self.apply(self._init_weights)
-        # self.head.weight.data.mul_(head_init_scale)
-        # self.head.bias.data.mul_(head_init_scale)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
