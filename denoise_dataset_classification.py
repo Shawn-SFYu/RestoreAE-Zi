@@ -17,7 +17,7 @@ from torch.utils.data import TensorDataset, random_split
 import random
 
 from cae import CAE
-from PrepareData import DataPair
+
 
 from PaintingMethods import img_processing_pool
 
@@ -30,7 +30,12 @@ def painting(img):
     return img
 """
 
+class DataPair:
+    def __init__(self, img_input, img_output):
+        self.input = img_input
+        self.output = img_output
 
+        
 class PaintingTransform(object):
     def __init__(self, steps=3):
         self.step = steps

@@ -83,7 +83,7 @@ class DenoiseFolder(DatasetFolder):
         if self.transform is not None:
             noised = self.transform(original) # remove 255 *
             noised = np.array(noised, np.float32).squeeze()
-        standard = np.array(ChartoImg(character, cvt_traditional=True), dtype=np.float32) / 255  # remove 255
+        standard = np.array(char2img(character, cvt_traditional=True), dtype=np.float32) / 255  # remove 255
         sample = np.stack((noised, standard), axis=0)
         sample = torch.from_numpy(sample)
         original = img2tensor(original)  # torch.squeeze(img2tensor(original))  # torch.squeeze((255 * img2tensor(original)).to(torch.uint8))
