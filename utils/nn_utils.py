@@ -13,6 +13,9 @@ import torch.distributed as dist
 
 from tensorboardX import SummaryWriter
 
+from models.convnext_cae import ConvNextCAE
+
+
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -583,3 +586,14 @@ def auto_load_model(
             if "scaler" in checkpoint:
                 loss_scaler.load_state_dict(checkpoint["scaler"])
             print("With optim & sched!")
+
+
+def create_model(model, latent_dimension):
+    if model == 'effiNet':
+        raise ValueError('To be implemented')
+    elif model == 'MobileNet':
+        raise ValueError('To be implemented')
+    elif model == 'convNext':
+        return ConvNextCAE(latent_dimension)
+    else:
+        raise ValueError('unrecognized model name')

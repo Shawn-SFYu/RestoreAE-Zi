@@ -11,10 +11,11 @@ from pathlib import Path
 from timm.utils import ModelEma
 from utils.optim_factory import create_optimizer, LayerDecayValueAssigner
 
-from cae import CAE
-from cae_engine import train_one_epoch, evaluate
+from convnext_cae import CAE
+from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset
 from utils import nn_utils
+from utils.nn_utils import create_model
 from utils.nn_utils import NativeScalerWithGradNormCount as NativeScaler
 
 
@@ -305,7 +306,7 @@ def main(args):
     else:
         data_loader_val = None
 
-    model = CAE(args.latent_size)
+    model = create_model(args.model, args.latent_size)
     model.to(device)
 
     model_ema = None

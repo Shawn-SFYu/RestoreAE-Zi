@@ -1,16 +1,14 @@
 import torch
 import torch.nn as nn
-from convnext import ConvNeXt, RevConvNext
-from timm.models import register_model
+from models.convnext import ConvNeXt, RevConvNext
 from torchsummary import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-@register_model
-class CAE(nn.Module):
+class ConvNextCAE(nn.Module):
     def __init__(self, latent_size):
-        super(CAE, self).__init__()
+        super(ConvNextCAE, self).__init__()
         self.latent_size = latent_size
         self.depth = [3, 3, 9, 3]
         self.dims = [96, 192, 384, 768]
@@ -40,7 +38,7 @@ class CAE(nn.Module):
 
 
 if __name__ == "__main__":
-    convnext_ae = CAE(512)
+    convnext_ae = ConvNextCAE(512)
     convnext_ae.to(device)
     sample_input = (2, 224, 224)
     summary(convnext_ae, input_size=sample_input)
