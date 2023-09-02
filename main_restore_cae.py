@@ -11,7 +11,7 @@ from pathlib import Path
 from timm.utils import ModelEma
 from utils.optim_factory import create_optimizer, LayerDecayValueAssigner
 
-from convnext_cae import CAE
+from models.convnext_cae import ConvNextCAE
 from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset
 from utils import nn_utils

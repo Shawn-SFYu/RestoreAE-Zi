@@ -593,7 +593,7 @@ def create_model(model, latent_dimension):
         raise ValueError('To be implemented')
     elif model == 'MobileNet':
         raise ValueError('To be implemented')
-    elif model == 'convNext':
+    elif model == 'convnext':
         return ConvNextCAE(latent_dimension)
     else:
         raise ValueError('unrecognized model name')
