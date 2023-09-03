@@ -85,9 +85,12 @@ class RevBtnkBlock(nn.Module):
         self.conv1 = nn.ConvTranspose2d(in_size, expand_size, kernel_size=1, bias=False) # pointwise
         self.bn1 = nn.BatchNorm2d(expand_size)
         self.activation1 = activation(inplace=True)
-
-        self.conv2 = nn.ConvTranspose2d(expand_size, expand_size, kernel_size=kernel_size, stride=stride, \
-                               padding=kernel_size//2, groups=expand_size, bias=False) # depthwise
+        if stride > 1:
+            self.conv2 = nn.ConvTranspose2d(expand_size, expand_size, kernel_size=kernel_size, stride=stride, \
+                               padding=kernel_size//2, output_padding=1, groups=expand_size, bias=False) # depthwise
+        else:
+            self.conv2 = nn.ConvTranspose2d(expand_size, expand_size, kernel_size=kernel_size, stride=stride, \
+                               padding=kernel_size//2, groups=expand_size, bias=False) # depthwise           
         self.bn2 = nn.BatchNorm2d(expand_size)
         self.activation2 = activation(inplace=True)
         self.se = SeModule(expand_size) if se else nn.Identity()
@@ -105,7 +108,8 @@ class RevBtnkBlock(nn.Module):
 
         elif stride == 2 and in_size != out_size:
             self.skip = nn.Sequential(
-                nn.ConvTranspose2d(in_channels=in_size, out_channels=in_size, kernel_size=3, groups=in_size, stride=2, padding=1, bias=False),
+                nn.ConvTranspose2d(in_channels=in_size, out_channels=in_size, kernel_size=3, groups=in_size, \
+                                   stride=2, padding=1, output_padding=1, bias=False),
                 nn.BatchNorm2d(in_size),
                 nn.ConvTranspose2d(in_size, out_size, kernel_size=1, bias=True),
                 nn.BatchNorm2d(out_size)
@@ -113,7 +117,8 @@ class RevBtnkBlock(nn.Module):
 
         elif stride == 2 and in_size == out_size:
             self.skip = nn.Sequential(
-                nn.ConvTranspose2d(in_channels=in_size, out_channels=out_size, kernel_size=3, groups=in_size, stride=2, padding=1, bias=False),
+                nn.ConvTranspose2d(in_channels=in_size, out_channels=out_size, kernel_size=3, groups=in_size, \
+                                   stride=2, padding=1, output_padding=1, bias=False),
                 nn.BatchNorm2d(out_size)
             )
 
@@ -227,7 +232,7 @@ class RevMobileNetV3(nn.Module):
             RevBtnkBlock(kernel_size=3, in_size=16, expand_size=16, out_size=16, activation=nn.ReLU, se=True, stride=2), 
         )
 
-        self.conv_r1 = nn.ConvTranspose2d(16, 1, kernel_size=3, stride=2, padding=1, bias=False)
+        self.conv_r1 = nn.ConvTranspose2d(16, 1, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False)
         
         self.apply(self._init_weights)
 
