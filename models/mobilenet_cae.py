@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchsummary import summary
-from models.mobilenetv3 import MobileNetV3, RevMobileNetV3
+from mobilenetv3 import MobileNetV3, RevMobileNetV3
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

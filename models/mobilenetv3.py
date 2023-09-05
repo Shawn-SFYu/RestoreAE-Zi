@@ -8,17 +8,19 @@ class SeModule(nn.Module):
     def __init__(self, in_size, reduction=4):
         super(SeModule, self).__init__()
         expand_size =  max(in_size // reduction, 8)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.se = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_size, expand_size, kernel_size=1, bias=False),
-            nn.BatchNorm2d(expand_size),
+            nn.Linear(in_size, expand_size, bias=False),
             nn.ReLU(inplace=True),
-            nn.Conv2d(expand_size, in_size, kernel_size=1, bias=False),
+            nn.Linear(expand_size, in_size, bias=False),
             nn.Hardsigmoid()
         )
 
     def forward(self, x):
-        return x * self.se(x)
+        avg = self.avg_pool(x).flatten(1)
+        w = self.se(avg).unsqueeze(-1).unsqueeze(-1)
+
+        return x * w.expand_as(x)
 
 
 class BtnkBlock(nn.Module):

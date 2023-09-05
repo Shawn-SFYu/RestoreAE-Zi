@@ -4,7 +4,7 @@ A neural network for restoring inscriptions and ancient writings from damages ba
 
 The network architecture is customized based on Autoencoder and [EfficientNetV2](https://arxiv.org/abs/2104.00298), [MobileNetV3](https://arxiv.org/abs/1905.02244), [ConvNeXt](https://arxiv.org/abs/2201.03545). The input is class-informed by providing an additional channel given by standard font along with inscription images.
 
-The encoder is based on EfficientNetV2/MobileNetV3/ConvNeXt-T and has around //30M parameters, and the decoder structure is the reversed counterpart. The latent space dimension is 512 by default.
+The autoencoder based on EfficientNetV2/MobileNetV3/ConvNeXt-T has around /4.5M/51M parameters respectively. The latent space dimension is 512 by default.
 
 This work is mostly for demo purpose. More comprehensive data preparation and ablation studies wait to be done to improve generalization and explore the complexity-performance trade-off. 
 

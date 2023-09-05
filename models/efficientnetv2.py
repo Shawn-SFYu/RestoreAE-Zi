@@ -8,7 +8,8 @@ class FusedMBZBlock(nn.Module):
         super().__init__()
         self.stride = stride
 
-        self.conv1 = nn.Conv2d(in_size, expand_size, kernel_size=kernel_size, bias=False)
+        self.conv1 = nn.Conv2d(in_size, expand_size, kernel_size=kernel_size, \
+                               padding=kernel_size//2, stride=stride, bias=False)
         self.bn1 = nn.BatchNorm2d(expand_size)
         self.activation1 = activation(inplace=True)
 
@@ -18,8 +19,8 @@ class FusedMBZBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_size)
         self.activation2 = activation(inplace=True)
 
-        self.skip = nn.Identity()
-        if stride == 1: #  and in_size != out_size:
+        self.skip = None
+        if stride == 1 and in_size != out_size:
             self.skip = nn.Sequential(
                 nn.Conv2d(in_size, out_size, kernel_size=1, bias=False),
                 nn.BatchNorm2d(out_size)
@@ -46,7 +47,10 @@ class FusedMBZBlock(nn.Module):
         x = self.activation1(self.bn1(self.conv1(x)))
         x - self.se(x)
         x = self.bn2(self.conv2(x))
-        x = x + self.skip(skip)
+
+        if self.skip is not None:
+            skip = self.skip(skip)
+        x = x + skip
         return self.activation2(x)
 
 class RevFusedMBZBlock(nn.Module):
@@ -105,43 +109,43 @@ class EfficientNetV2(nn.Module):
         self.bn1 = nn.BatchNorm2d(num_features=24)
         self.act1 = act(inplace=True)
 
+        self.stages = []
+        input_channel = 24
+
         self.fusedMBConv_cfg = [  # Fused-MBConv in EffNet V2 S
             [1, 24, 2, 1, 0],  
             [4, 48, 4, 2, 0],
             [4, 64, 4, 2, 0],
         ]  # expansion ratio, channels num, layer num, stride, SE
-        self.n_fusedMBConv = len(self.fusedMBConv_cfg) 
+
+        for cfg in self.fusedMBConv_cfg:
+            output_channel = cfg[1]
+            expand_size=input_channel*cfg[0]
+            for i in range(cfg[2]):
+                self.stages.append(
+                    FusedMBZBlock(kernel_size=3, in_size=input_channel, expand_size=input_channel*cfg[0], \
+                                 out_size=output_channel, activation=act, se=cfg[4], stride=(cfg[3] if i == 0 else 1))
+                                 )
+                input_channel = output_channel
 
         self.MBConv_cfg = [  # MBConv in EffNet V2 S
             [4, 128,  6, 2, 1],
             [6, 160,  9, 1, 1],
             [6, 256, 15, 2, 1],
         ] # expansion ratio, channels num, layer num, stride, SE
-        self.n_MBConv = len(self.MBConv_cfg)
-        
-        self.stages = []
-        input_channel = 24
-
-        for cfg in self.fusedMBConv_cfg:
-            output_channel = cfg[1]
-            for i in range(cfg[2]):
-                self.stages.append(
-                    FusedMBZBlock(kernel_size=3, in_size=input_channel, expand_size=input_channel*cfg[0], \
-                                 out_size=output_channel, activation=act, se=cfg[4], stride=cfg[3])
-                                 )
-                input_channel = output_channel
 
         for cfg in self.MBConv_cfg:
             output_channel = cfg[1]
-
+            expand_size=input_channel*cfg[0]
             for i in range(cfg[2]):
                 self.stages.append(
-                    FusedMBZBlock(kernel_size=3, in_size=input_channel, expand_size=input_channel*cfg[0], \
-                                 out_size=output_channel, activation=act, se=cfg[4], stride=cfg[3])
+                    BtnkBlock(kernel_size=3, in_size=input_channel, expand_size=expand_size, \
+                                 out_size=output_channel, activation=act, se=cfg[4], stride=(cfg[3] if i == 0 else 1))
                                  )
                 input_channel = output_channel
         
         self.MBBlocks = nn.Sequential(*self.stages)
+
         self.conv2 = nn.Conv2d(in_channels=input_channel, out_channels=256, kernel_size=1)
         self.bn2 = nn.BatchNorm2d(num_features=256)
         self.act2 = act(inplace=True)
