@@ -14,6 +14,7 @@ import torch.distributed as dist
 from tensorboardX import SummaryWriter
 
 from models.convnext_cae import ConvNextCAE
+from models.mobilenet_cae import MobileNetCAE
 
 
 
@@ -589,10 +590,10 @@ def auto_load_model(
 
 
 def create_model(model, latent_dimension):
-    if model == 'effiNet':
+    if model == 'effinet':
         raise ValueError('To be implemented')
-    elif model == 'MobileNet':
-        raise ValueError('To be implemented')
+    elif model == 'mobilenet':
+        return MobileNetCAE(latent_dimension)
     elif model == 'convnext':
         return ConvNextCAE(latent_dimension)
     else:

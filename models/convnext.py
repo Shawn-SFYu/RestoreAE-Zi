@@ -133,7 +133,7 @@ class RevConvNext(nn.Module):
         self,
         in_chans=3,
         depths=[3, 3, 9, 3],
-        dims=[96, 192, 384, 768],
+        dims,
         drop_path_rate=0.0,
         layer_scale_init_value=1e-6,
     ):

@@ -27,17 +27,17 @@ class BtnkBlock(nn.Module):
         super().__init__()
         self.stride = stride
 
-        self.conv1 = nn.Conv2d(in_size, expand_size, kernel_size=1, bias=False) # pointwise
+        self.conv1 = nn.Conv2d(in_size, expand_size, kernel_size=1, bias=False) # expand channels
         self.bn1 = nn.BatchNorm2d(expand_size)
         self.activation1 = activation(inplace=True)
 
         self.conv2 = nn.Conv2d(expand_size, expand_size, kernel_size=kernel_size, stride=stride, \
-                               padding=kernel_size//2, groups=expand_size, bias=False)
+                               padding=kernel_size//2, groups=expand_size, bias=False) # depwise conv
         self.bn2 = nn.BatchNorm2d(expand_size)
         self.activation2 = activation(inplace=True)
         self.se = SeModule(expand_size) if se else nn.Identity()
 
-        self.conv3 = nn.Conv2d(expand_size, out_size, kernel_size=1, bias=False) # pointwise
+        self.conv3 = nn.Conv2d(expand_size, out_size, kernel_size=1, bias=False) # pointwise, project
         self.bn3 = nn.BatchNorm2d(out_size)
         self.activation3 = activation(inplace=True)
 
@@ -140,7 +140,7 @@ class RevBtnkBlock(nn.Module):
 class MobileNetV3(nn.Module):
     def __init__(self, in_chans, latent_dimension, act=nn.Hardswish):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_chans, 16, kernel_size=3, stride=2, padding=1, bias=False)
+        self.conv1 = nn.Conv2d(in_chans, out_channels=16, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
         self.hs1 = act(inplace=True)
 
@@ -181,16 +181,12 @@ class MobileNetV3(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        print(x.shape)
         x = self.hs1(self.bn1(self.conv1(x)))
-        print(x.shape)
         x = self.bneck(x)
 
         x = self.hs2(self.bn2(self.conv2(x)))
         x = self.ave_pool(x)
-        print(x.shape)
         x = x.flatten(1)
-        print(x.shape)
         x = self.drop(self.hs3(self.bn3(self.linear3(x))))
 
         return self.linear4(x)
@@ -251,7 +247,6 @@ class RevMobileNetV3(nn.Module):
         x = self.drop(x)
         x = self.hs_r3(self.bn_r3(self.linear_r3(x)))
         x = torch.unsqueeze(torch.unsqueeze(x, dim=-1), dim=-1)
-        print(x.shape)
         x = self.upscale(x)
         x = self.hs_r2(self.bn_r2(self.conv_r2(x)))
         x = self.bneck(x)

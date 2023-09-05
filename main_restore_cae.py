@@ -25,7 +25,7 @@ def get_args_parser():
         add_help=False,
     )
     parser.add_argument("--batch_size", default=64, type=int, help="Per GPU batch size")
-    parser.add_argument("--epochs", default=100, type=int)
+    parser.add_argument("--epochs", default=200, type=int)
     parser.add_argument(
         "--update_freq", default=1, type=int, help="gradient accumulation steps"
     )
@@ -33,7 +33,7 @@ def get_args_parser():
     # Model parameters
     parser.add_argument(
         "--model",
-        default="CAE",
+        default="convnext",
         type=str,
         metavar="MODEL",
         help="Name of model to train",
@@ -152,7 +152,7 @@ def get_args_parser():
         help="ImageNet dataset path",
     )
     parser.add_argument(
-        "--output_dir", default="", help="path where to save, empty for no saving"
+        "--output_dir", default="./checkpoint", help="path where to save, empty for no saving"
     )
     parser.add_argument(
         "--log_dir", default="./log", help="path where to tensorboard log"

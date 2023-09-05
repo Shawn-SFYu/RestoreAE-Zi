@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchsummary import summary
-from mobilenetv3 import MobileNetV3, RevMobileNetV3
+from models.mobilenetv3 import MobileNetV3, RevMobileNetV3
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -12,7 +12,6 @@ class MobileNetCAE(nn.Module):
         self.decoder = RevMobileNetV3(latent_dimension=latent_dimension)
 
     def forward(self, img_label):
-        print(img_label.shape)
         z = self.encoder(img_label)
         x = self.decoder(z)
         return x
