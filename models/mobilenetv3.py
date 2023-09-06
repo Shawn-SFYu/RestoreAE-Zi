@@ -211,9 +211,8 @@ class InvMobileNetV3(nn.Module):
         self.linear_r3 = nn.Linear(1024, 576, bias=False)
         self.hs_r3 = act(inplace=True)
         self.bn_r3 = nn.BatchNorm1d(576)
-        #  TO DO check group convolution in upscale
-        self.upscale = nn.ConvTranspose2d(in_channels=576, out_channels=576, kernel_size=7, groups=576//16)
-
+       
+        self.upscale = nn.ConvTranspose2d(in_channels=576, out_channels=576, kernel_size=7, groups=576)
 
         self.conv_r2 = nn.ConvTranspose2d(576, 96, kernel_size=1, stride=1, padding=0, bias=False)
         self.bn_r2 = nn.BatchNorm2d(96)
