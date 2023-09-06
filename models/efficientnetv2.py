@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchsummary import summary
-from mobilenetv3 import SeModule, BtnkBlock, RevBtnkBlock
+from mobilenetv3 import SeModule, BtnkBlock, InvBtnkBlock
 
 class FusedMBZBlock(nn.Module):
     def __init__(self, kernel_size, in_size, expand_size, out_size, activation, se, stride) -> None:
@@ -53,12 +53,16 @@ class FusedMBZBlock(nn.Module):
         x = x + skip
         return self.activation2(x)
 
-class RevFusedMBZBlock(nn.Module):
+class InvFusedMBZBlock(nn.Module):
     def __init__(self, kernel_size, in_size, expand_size, out_size, activation, se, stride) -> None:
         super().__init__()
         self.stride = stride
-
-        self.conv1 = nn.ConvTranspose2d(in_size, expand_size, kernel_size=kernel_size, bias=False)
+        if stride > 1:
+            self.conv1 = nn.ConvTranspose2d(in_size, expand_size, kernel_size=kernel_size, \
+                                padding=kernel_size//2, output_padding=1, stride=stride, bias=False)
+        else:
+            self.conv1 = nn.ConvTranspose2d(in_size, expand_size, kernel_size=kernel_size, \
+                                padding=kernel_size//2, stride=stride, bias=False)            
         self.bn1 = nn.BatchNorm2d(expand_size)
         self.activation1 = activation(inplace=True)
 
@@ -96,9 +100,10 @@ class RevFusedMBZBlock(nn.Module):
         x = self.activation1(self.bn1(self.conv1(x)))
         x - self.se(x)
         x = self.bn2(self.conv2(x))
-        x = x + self.skip(skip)
+        if self.skip is not None:
+            skip = self.skip(skip)
+        x = x + skip
         return self.activation2(x)
-
 
 
 class EfficientNetV2(nn.Module):
@@ -173,7 +178,87 @@ class EfficientNetV2(nn.Module):
         x = self.act3(self.bn3(self.linear3(x)))
 
         return self.linear4(x)
-    
+
+class InvEfficientNet(nn.Module):
+    def __init__(self, latent_dimension, act=nn.SiLU) -> None:
+        super().__init__()
+
+        self.linear4 = nn.Linear(latent_dimension, 1024)
+        self.bn4 = nn.BatchNorm1d(1024)
+        self.act4 = act(inplace=True)
+
+        self.linear3 = nn.Linear(1024, 256, bias=False)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.act3 = act(inplace=True)
+
+        self.upscale = nn.ConvTranspose2d(in_channels=256, out_channels=256, kernel_size=7, groups=256)
+        
+        self.conv2 = nn.ConvTranspose2d(in_channels=256, out_channels=256, kernel_size=1)
+        self.bn2 = nn.BatchNorm2d(num_features=256)
+        self.act2 = act(inplace=True)
+
+        self.stages = []
+        input_channel = 256
+
+        self.MBConv_cfg = [  # MBConv in EffNet V2 S
+            [4, 128,  6, 2, 1, 64],
+            [6, 160,  9, 1, 1, 128],
+            [6, 256, 15, 2, 1, 160],
+        ] # expansion ratio, channels num, layer num, stride, SE, output_channel for easy implementation
+
+        for cfg in self.MBConv_cfg[::-1]:
+            output_channel = cfg[1]
+            expand_size = cfg[5]*cfg[0]
+            for i in range(cfg[2]):
+                if i == cfg[2] - 1: output_channel = cfg[5] # reduce dimension for the last layer
+                self.stages.append(
+                    InvBtnkBlock(kernel_size=3, in_size=input_channel, expand_size=expand_size, \
+                                 out_size=output_channel, activation=act, se=cfg[4], stride=(cfg[3] if i == 0 else 1))
+                                 )
+                input_channel = output_channel
+
+        self.fusedMBConv_cfg = [  # Fused-MBConv in EffNet V2 S
+            [1, 24, 2, 1, 0, 24],  
+            [4, 48, 4, 2, 0, 24],
+            [4, 64, 4, 2, 0, 48],
+        ]  # expansion ratio, channels num, layer num, stride, SE
+
+        for cfg in self.fusedMBConv_cfg[::-1]:
+            output_channel = cfg[1]
+            expand_size = cfg[5]*cfg[0]
+            for i in range(cfg[2]):
+                if i == cfg[2] - 1: output_channel = cfg[5] # reduce dimension for the last layer
+                self.stages.append(
+                    InvFusedMBZBlock(kernel_size=3, in_size=input_channel, expand_size=input_channel*cfg[0], \
+                                 out_size=output_channel, activation=act, se=cfg[4], stride=(cfg[3] if i == 0 else 1))
+                                 )
+                input_channel = output_channel
+
+        self.InvMBBlocks = nn.Sequential(*self.stages)
+
+        self.conv1 = nn.ConvTranspose2d(in_channels=24, out_channels=1, kernel_size=3, \
+                                        padding=1, output_padding=1, stride=2, bias=False)
+
+
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            nn.init.trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.constant_(m.weight, 1)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.act4(self.bn4(self.linear4(x)))
+        x = self.act3(self.bn3(self.linear3(x)))
+        x = x.unsqueeze(-1).unsqueeze(-1)
+        x = self.upscale(x)
+        x = self.act2(self.bn2(self.conv2(x)))
+        x = self.InvMBBlocks(x)
+        return self.conv1(x)
+
 
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -181,4 +266,9 @@ if __name__ == "__main__":
     effnet.to(device)
     sample_input = (2, 224, 224)
     summary(effnet, input_size=sample_input)
+
+    inveffnet = InvEfficientNet(latent_dimension=512)
+    inveffnet.to(device)
+    sample_input = tuple([512])
+    summary(inveffnet, input_size=sample_input)
     

@@ -78,8 +78,11 @@ class BtnkBlock(nn.Module):
         return self.activation3(x)        
     
 
-class RevBtnkBlock(nn.Module):
-    """expand + depthwise + pointwise"""
+class InvBtnkBlock(nn.Module):
+    '''
+    expand + depthwise + pointwise
+    ConvTranpose2d for invertion
+    '''
     def __init__(self, kernel_size, in_size, expand_size, out_size, activation, se, stride) -> None:
         super().__init__()
         self.stride = stride
@@ -195,7 +198,7 @@ class MobileNetV3(nn.Module):
     
 
 
-class RevMobileNetV3(nn.Module):
+class InvMobileNetV3(nn.Module):
     def __init__(self, latent_dimension, act=nn.Hardswish):
         super().__init__()
 
@@ -208,7 +211,7 @@ class RevMobileNetV3(nn.Module):
         self.linear_r3 = nn.Linear(1024, 576, bias=False)
         self.hs_r3 = act(inplace=True)
         self.bn_r3 = nn.BatchNorm1d(576)
-        
+        #  TO DO check group convolution in upscale
         self.upscale = nn.ConvTranspose2d(in_channels=576, out_channels=576, kernel_size=7, groups=576//16)
 
 
@@ -216,18 +219,18 @@ class RevMobileNetV3(nn.Module):
         self.bn_r2 = nn.BatchNorm2d(96)
         self.hs_r2 = act(inplace=True)
 
-        self.bneck = nn.Sequential(  # reverted from MobileNetV3
-            RevBtnkBlock(kernel_size=5, in_size=96, expand_size=576, out_size=96, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=96, expand_size=576, out_size=96, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=96, expand_size=288, out_size=48, activation=act, se=True, stride=2),
-            RevBtnkBlock(kernel_size=5, in_size=48, expand_size=144, out_size=48, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=48, expand_size=120, out_size=40, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=40, expand_size=240, out_size=40, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=40, expand_size=240, out_size=40, activation=act, se=True, stride=1),
-            RevBtnkBlock(kernel_size=5, in_size=40, expand_size=96, out_size=24, activation=act, se=True, stride=2),
-            RevBtnkBlock(kernel_size=3, in_size=24, expand_size=88, out_size=24, activation=nn.ReLU, se=False, stride=1),
-            RevBtnkBlock(kernel_size=3, in_size=24, expand_size=72, out_size=16, activation=nn.ReLU, se=False, stride=2),
-            RevBtnkBlock(kernel_size=3, in_size=16, expand_size=16, out_size=16, activation=nn.ReLU, se=True, stride=2), 
+        self.bneck = nn.Sequential(  # inverted from MobileNetV3
+            InvBtnkBlock(kernel_size=5, in_size=96, expand_size=576, out_size=96, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=96, expand_size=576, out_size=96, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=96, expand_size=288, out_size=48, activation=act, se=True, stride=2),
+            InvBtnkBlock(kernel_size=5, in_size=48, expand_size=144, out_size=48, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=48, expand_size=120, out_size=40, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=40, expand_size=240, out_size=40, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=40, expand_size=240, out_size=40, activation=act, se=True, stride=1),
+            InvBtnkBlock(kernel_size=5, in_size=40, expand_size=96, out_size=24, activation=act, se=True, stride=2),
+            InvBtnkBlock(kernel_size=3, in_size=24, expand_size=88, out_size=24, activation=nn.ReLU, se=False, stride=1),
+            InvBtnkBlock(kernel_size=3, in_size=24, expand_size=72, out_size=16, activation=nn.ReLU, se=False, stride=2),
+            InvBtnkBlock(kernel_size=3, in_size=16, expand_size=16, out_size=16, activation=nn.ReLU, se=True, stride=2), 
         )
 
         self.conv_r1 = nn.ConvTranspose2d(16, 1, kernel_size=3, stride=2, padding=1, output_padding=1, bias=False)
@@ -248,7 +251,7 @@ class RevMobileNetV3(nn.Module):
         x = self.hs_r4(self.bn_r4(self.linear_r4(x)))
         x = self.drop(x)
         x = self.hs_r3(self.bn_r3(self.linear_r3(x)))
-        x = torch.unsqueeze(torch.unsqueeze(x, dim=-1), dim=-1)
+        x = x.unsqueeze(-1).unsqueeze(-1)
         x = self.upscale(x)
         x = self.hs_r2(self.bn_r2(self.conv_r2(x)))
         x = self.bneck(x)

@@ -13,9 +13,221 @@ import torch.distributed as dist
 
 from tensorboardX import SummaryWriter
 
-from models.convnext_cae import ConvNextCAE
-from models.mobilenet_cae import MobileNetCAE
+from models.mobilenet_ae import MobileNetAE
+from models.efficient_ae import EfficientNetAE
+from models.convnext_ae import ConvNextAE
 
+
+def get_args_parser():
+    parser = argparse.ArgumentParser(
+        "ConvNeXt training and evaluation script for image classification",
+        add_help=False,
+    )
+    parser.add_argument("--batch_size", default=64, type=int, help="Per GPU batch size")
+    parser.add_argument("--epochs", default=200, type=int)
+    parser.add_argument(
+        "--update_freq", default=1, type=int, help="gradient accumulation steps"
+    )
+
+    # Model parameters
+    parser.add_argument(
+        "--model",
+        default="convnext",
+        type=str,
+        metavar="MODEL",
+        help="Name of model to train",
+    )
+    parser.add_argument(
+        "--latent_size", default=512, type=int, help="Latent space size for CAE"
+    )
+    # EMA related parameters
+    parser.add_argument("--model_ema", type=bool, default=False)
+    parser.add_argument("--model_ema_decay", type=float, default=0.9999, help="")
+    parser.add_argument("--model_ema_force_cpu", type=bool, default=False, help="")
+    parser.add_argument(
+        "--model_ema_eval",
+        type=bool,
+        default=False,
+        help="Using ema to eval during training.",
+    )
+
+    # Optimization parameters
+    parser.add_argument(
+        "--opt",
+        default="adamw",
+        type=str,
+        metavar="OPTIMIZER",
+        help='Optimizer (default: "adamw"',
+    )
+    parser.add_argument(
+        "--opt_eps",
+        default=1e-8,
+        type=float,
+        metavar="EPSILON",
+        help="Optimizer Epsilon (default: 1e-8)",
+    )
+    parser.add_argument(
+        "--opt_betas",
+        default=None,
+        type=float,
+        nargs="+",
+        metavar="BETA",
+        help="Optimizer Betas (default: None, use opt default)",
+    )
+    parser.add_argument(
+        "--clip_grad",
+        type=float,
+        default=None,
+        metavar="NORM",
+        help="Clip gradient norm (default: None, no clipping)",
+    )
+    parser.add_argument(
+        "--momentum",
+        type=float,
+        default=0.9,
+        metavar="M",
+        help="SGD momentum (default: 0.9)",
+    )
+    parser.add_argument(
+        "--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)"
+    )
+    parser.add_argument(
+        "--weight_decay_end",
+        type=float,
+        default=None,
+        help="""Final value of the
+        weight decay. We use a cosine schedule for WD and using a larger decay by
+        the end of training improves performance for ViTs.""",
+    )
+
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=4e-3,
+        metavar="LR",
+        help="learning rate (default: 4e-3), with total batch size 4096",
+    )
+    parser.add_argument("--layer_decay", type=float, default=1.0)
+    parser.add_argument(
+        "--min_lr",
+        type=float,
+        default=1e-6,
+        metavar="LR",
+        help="lower lr bound for cyclic schedulers that hit 0 (1e-6)",
+    )
+    parser.add_argument(
+        "--warmup_epochs",
+        type=int,
+        default=20,
+        metavar="N",
+        help="epochs to warmup LR, if scheduler supports",
+    )
+    parser.add_argument(
+        "--warmup_steps",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="num of steps to warmup LR, will overload warmup_epochs if set > 0",
+    )
+
+    # Dataset parameters
+    parser.add_argument(
+        "--data_path", default="./DicData", type=str, help="dataset path"
+    )
+    parser.add_argument(
+        "--eval_data_path", default=None, type=str, help="dataset path for evaluation"
+    )
+    parser.add_argument(
+        "--nb_classes",
+        default=3751,
+        type=int,
+        help="number of the classification types",
+    )
+    parser.add_argument(
+        "--data_set",
+        default="image_folder",
+        choices=["CIFAR", "IMNET", "image_folder"],
+        type=str,
+        help="ImageNet dataset path",
+    )
+    parser.add_argument(
+        "--output_dir", default="./checkpoint", help="path where to save, empty for no saving"
+    )
+    parser.add_argument(
+        "--log_dir", default="./log", help="path where to tensorboard log"
+    )
+    parser.add_argument(
+        "--device", default="cuda", help="device to use for training / testing"
+    )
+    parser.add_argument("--seed", default=0, type=int)
+
+    parser.add_argument("--resume", default="", help="resume from checkpoint")
+    parser.add_argument("--auto_resume", type=bool, default=True)
+    parser.add_argument("--save_ckpt", type=bool, default=True)
+    parser.add_argument("--save_ckpt_freq", default=1, type=int)
+    parser.add_argument("--save_ckpt_num", default=3, type=int)
+
+    parser.add_argument(
+        "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
+    )
+    parser.add_argument(
+        "--eval", type=bool, default=False, help="Perform evaluation only"
+    )
+    parser.add_argument(
+        "--dist_eval", type=bool, default=True, help="Enabling distributed evaluation"
+    )
+    parser.add_argument(
+        "--disable_eval",
+        type=bool,
+        default=True,
+        help="Disabling evaluation during training",
+    )
+    parser.add_argument("--num_workers", default=10, type=int)
+    parser.add_argument(
+        "--pin_mem",
+        type=bool,
+        default=True,
+        help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",
+    )
+
+    # distributed training parameters
+    parser.add_argument(
+        "--world_size", default=4, type=int, help="number of distributed processes"
+    )
+    parser.add_argument("--local_rank", default=-1, type=int)
+    parser.add_argument("--dist_on_itp", type=bool, default=False)
+    parser.add_argument(
+        "--dist_url", default="env://", help="url used to set up distributed training"
+    )
+
+    parser.add_argument(
+        "--use_amp",
+        type=bool,
+        default=False,
+        help="Use PyTorch's AMP (Automatic Mixed Precision) or not",
+    )
+
+    # Weights and Biases arguments
+    parser.add_argument(
+        "--enable_wandb",
+        type=bool,
+        default=False,
+        help="enable logging to Weights and Biases",
+    )
+    parser.add_argument(
+        "--project",
+        default="convnext",
+        type=str,
+        help="The name of the W&B project where you're sending the new run.",
+    )
+    parser.add_argument(
+        "--wandb_ckpt",
+        type=bool,
+        default=False,
+        help="Save model checkpoints as W&B Artifacts.",
+    )
+
+    return parser
 
 
 class SmoothedValue(object):
@@ -591,10 +803,10 @@ def auto_load_model(
 
 def create_model(model, latent_dimension):
     if model == 'effinet':
-        raise ValueError('To be implemented')
+        return EfficientNetAE(latent_dimension)
     elif model == 'mobilenet':
-        return MobileNetCAE(latent_dimension)
+        return MobileNetAE(latent_dimension)
     elif model == 'convnext':
-        return ConvNextCAE(latent_dimension)
+        return ConvNextAE(latent_dimension)
     else:
         raise ValueError('unrecognized model name')
