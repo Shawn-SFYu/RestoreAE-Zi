@@ -128,12 +128,12 @@ class ConvNeXt(nn.Module):
         )  # global average pooling, (N, C, H, W) -> (N, C)
 
 
-class RevConvNext(nn.Module):
+class InvConvNext(nn.Module):
     def __init__(
         self,
         in_chans=3,
         depths=[3, 3, 9, 3],
-        dims,
+        dims=[768, 384, 192, 96],
         drop_path_rate=0.0,
         layer_scale_init_value=1e-6,
     ):

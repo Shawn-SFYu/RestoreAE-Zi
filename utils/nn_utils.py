@@ -3,6 +3,7 @@ import math
 import time
 from collections import defaultdict, deque
 import datetime
+import argparse
 import numpy as np
 from timm.utils import get_state_dict
 
@@ -20,10 +21,10 @@ from models.convnext_ae import ConvNextAE
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
-        "ConvNeXt training and evaluation script for image classification",
+        "Autoencoder training and evaluation script for restoration",
         add_help=False,
     )
-    parser.add_argument("--batch_size", default=64, type=int, help="Per GPU batch size")
+    parser.add_argument("--batch_size", default=32, type=int, help="Per GPU batch size")
     parser.add_argument("--epochs", default=200, type=int)
     parser.add_argument(
         "--update_freq", default=1, type=int, help="gradient accumulation steps"
@@ -32,7 +33,7 @@ def get_args_parser():
     # Model parameters
     parser.add_argument(
         "--model",
-        default="convnext",
+        default="mobilenet",
         type=str,
         metavar="MODEL",
         help="Name of model to train",
@@ -132,7 +133,7 @@ def get_args_parser():
 
     # Dataset parameters
     parser.add_argument(
-        "--data_path", default="./DicData", type=str, help="dataset path"
+        "--data_path", default="../Data/DicData", type=str, help="dataset path"
     )
     parser.add_argument(
         "--eval_data_path", default=None, type=str, help="dataset path for evaluation"

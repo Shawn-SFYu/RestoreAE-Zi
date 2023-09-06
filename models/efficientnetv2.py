@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchsummary import summary
-from mobilenetv3 import SeModule, BtnkBlock, InvBtnkBlock
+from .mobilenetv3 import SeModule, BtnkBlock, InvBtnkBlock
 
 class FusedMBZBlock(nn.Module):
     def __init__(self, kernel_size, in_size, expand_size, out_size, activation, se, stride) -> None:

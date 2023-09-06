@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchsummary import summary
-from efficientnetv2 import EfficientNetV2, InvEfficientNet
+from .efficientnetv2 import EfficientNetV2, InvEfficientNet
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
