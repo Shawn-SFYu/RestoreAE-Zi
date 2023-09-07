@@ -11,10 +11,6 @@ from pathlib import Path
 from timm.utils import ModelEma
 from utils.optim_factory import create_optimizer, LayerDecayValueAssigner
 
-from models.mobilenet_ae import MobileNetAE
-from models.efficient_ae import EfficientNetAE
-from models.convnext_ae import ConvNextAE
-
 from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset
 from utils import nn_utils
@@ -335,7 +331,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "Denoise CAE training and evaluation script", parents=[get_args_parser()]
+        "Autoencoder training and evaluation script for restoration", parents=[get_args_parser()]
     )
     args = parser.parse_args()
     if args.output_dir:

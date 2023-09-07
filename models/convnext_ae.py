@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from convnext import ConvNeXt, RevConvNext
+from .convnext import ConvNeXt, InvConvNext
 from torchsummary import summary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -15,7 +15,7 @@ class ConvNextAE(nn.Module):
         self.fc_latent2 = self.dims[-1]
 
         self.encoder = ConvNeXt(in_chans=2, depths=self.depth, dims=self.dims)
-        self.decoder = RevConvNext(
+        self.decoder = InvConvNext(
             in_chans=768, depths=self.depth, dims=self.dims[::-1]
         )
         # only flip the channel number for blocks
