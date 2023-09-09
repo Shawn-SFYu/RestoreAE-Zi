@@ -17,6 +17,7 @@ from tensorboardX import SummaryWriter
 from models.mobilenet_ae import MobileNetAE
 from models.efficient_ae import EfficientNetAE
 from models.convnext_ae import ConvNextAE
+from models.vit_ae import ViT_AE
 
 
 def get_args_parser():
@@ -809,5 +810,7 @@ def create_model(model, latent_dimension):
         return MobileNetAE(latent_dimension)
     elif model == 'convnext':
         return ConvNextAE(latent_dimension)
+    elif model == 'vit':
+        return ViT_AE(in_channels=2, out_channel=1)
     else:
         raise ValueError('unrecognized model name')

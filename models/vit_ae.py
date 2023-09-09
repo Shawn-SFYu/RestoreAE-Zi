@@ -82,7 +82,6 @@ class ViT_Decoder(nn.Module):
         self.patch_size = patch_size
         self.patch_num = image_size // patch_size
         self.pos_embedding = nn.Parameter(torch.zeros((image_size // patch_size) ** 2 + 1, 1, emb_dim))
-
         self.transformer = nn.Sequential(*[Block(emb_dim, num_head) for _ in range(num_layer)])
 
         self.head = nn.Linear(emb_dim, out_channel * patch_size ** 2)
@@ -114,19 +113,20 @@ class ViT_Decoder(nn.Module):
 class ViT_AE(nn.Module):
     def __init__(self,
                  in_channels=2,
+                 out_channel=1,
                  image_size=224,
                  patch_size=16,
                  encoder_emb_dim=768,
                  decoder_emb_dim=768,
                  encoder_layer=12,
                  encoder_head=12,
-                 decoder_layer=12,
+                 decoder_layer=4,
                  decoder_head=12,
                  ) -> None:
         super().__init__()
 
         self.encoder = ViT_Encoder(in_channels, image_size, patch_size, encoder_emb_dim, encoder_layer, encoder_head)
-        self.decoder = ViT_Decoder(image_size, patch_size, decoder_emb_dim, decoder_layer, decoder_head)
+        self.decoder = ViT_Decoder(out_channel, image_size, patch_size, decoder_emb_dim, decoder_layer, decoder_head)
 
     def forward(self, img):
         features = self.encoder(img)
