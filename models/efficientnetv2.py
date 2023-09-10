@@ -159,6 +159,7 @@ class EfficientNetV2(nn.Module):
         self.bn3 = nn.BatchNorm1d(1024)
         self.act3 = act(inplace=True)
         self.linear4 = nn.Linear(1024, latent_dimension)
+        self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
@@ -238,6 +239,7 @@ class InvEfficientNet(nn.Module):
 
         self.conv1 = nn.ConvTranspose2d(in_channels=24, out_channels=1, kernel_size=3, \
                                         padding=1, output_padding=1, stride=2, bias=False)
+        self.apply(self._init_weights)
 
 
     def _init_weights(self, m):
