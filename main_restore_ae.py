@@ -66,10 +66,6 @@ def main(args):
     else:
         log_writer = None
 
-    if global_rank == 0 and args.enable_wandb:
-        wandb_logger = nn_utils.WandbLogger(args)
-    else:
-        wandb_logger = None
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train,
@@ -121,24 +117,7 @@ def main(args):
     print("Number of training examples = %d" % len(dataset_train))
     print("Number of training training per epoch = %d" % num_training_steps_per_epoch)
 
-    if args.layer_decay < 1.0 or args.layer_decay > 1.0:
-        num_layers = 12  # convnext layers divided into 12 parts, each with a different decayed lr value.
-        assert args.model in [
-            "convnext_small",
-            "convnext_base",
-            "convnext_large",
-            "convnext_xlarge",
-        ], "Layer Decay impl only supports convnext_small/base/large/xlarge"
-        assigner = LayerDecayValueAssigner(
-            list(
-                args.layer_decay ** (num_layers + 1 - i) for i in range(num_layers + 2)
-            )
-        )
-    else:
-        assigner = None
-
-    if assigner is not None:
-        print("Assigned values = %s" % str(assigner.values))
+    assigner = None
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
@@ -211,8 +190,6 @@ def main(args):
             data_loader_train.sampler.set_epoch(epoch)
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
-        if wandb_logger:
-            wandb_logger.set_steps()
 
         print(f"length dataloader {len(data_loader_train)}")
         train_stats = train_one_epoch(
@@ -225,9 +202,7 @@ def main(args):
             loss_scaler,
             args.clip_grad,
             model_ema,
-            mixup_fn=None,
             log_writer=log_writer,
-            wandb_logger=wandb_logger,
             start_steps=epoch * num_training_steps_per_epoch,
             lr_schedule_values=lr_schedule_values,
             wd_schedule_values=wd_schedule_values,
@@ -317,12 +292,6 @@ def main(args):
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
                 f.write(yaml.dumps(log_stats) + "\n")
-
-        if wandb_logger:
-            wandb_logger.log_epoch_metrics(log_stats)
-
-    if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
-        wandb_logger.log_checkpoints()
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

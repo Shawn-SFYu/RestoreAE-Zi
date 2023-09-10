@@ -1,6 +1,5 @@
 import math
 import torch
-from timm.data import Mixup
 from timm.utils import ModelEma
 from typing import Iterable, Optional
 from utils import nn_utils
@@ -16,9 +15,7 @@ def train_one_epoch(
     loss_scaler,
     max_norm: float = 0,
     model_ema: Optional[ModelEma] = None,
-    mixup_fn: Optional[Mixup] = None,
     log_writer=None,
-    wandb_logger=None,
     start_steps=None,
     lr_schedule_values=None,
     wd_schedule_values=None,
@@ -59,9 +56,6 @@ def train_one_epoch(
                     param_group["weight_decay"] = wd_schedule_values[it]
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-
-        if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
 
         if use_amp:
             with torch.cuda.amp.autocast():
@@ -130,21 +124,6 @@ def train_one_epoch(
             if use_amp:
                 log_writer.update(grad_norm=grad_norm, head="opt")
             log_writer.set_step()
-
-        if wandb_logger:
-            wandb_logger._wandb.log(
-                {
-                    "Rank-0 Batch Wise/train_loss": loss_value,
-                    "Rank-0 Batch Wise/train_max_lr": max_lr,
-                    "Rank-0 Batch Wise/train_min_lr": min_lr,
-                },
-                commit=False,
-            )
-            if use_amp:
-                wandb_logger._wandb.log(
-                    {"Rank-0 Batch Wise/train_grad_norm": grad_norm}, commit=False
-                )
-            wandb_logger._wandb.log({"Rank-0 Batch Wise/global_train_step": it})
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
