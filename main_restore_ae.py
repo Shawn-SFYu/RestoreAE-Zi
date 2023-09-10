@@ -4,7 +4,7 @@ import numpy as np
 import time
 import torch
 import torch.backends.cudnn as cudnn
-import json
+import yaml
 import os
 
 from pathlib import Path
@@ -316,7 +316,7 @@ def main(args):
             with open(
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
-                f.write(json.dumps(log_stats) + "\n")
+                f.write(yaml.dumps(log_stats) + "\n")
 
         if wandb_logger:
             wandb_logger.log_epoch_metrics(log_stats)

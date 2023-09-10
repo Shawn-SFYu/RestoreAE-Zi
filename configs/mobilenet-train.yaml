@@ -1,0 +1,6 @@
+model: mobilenet
+latent_size: 512
+batch_size: 32
+epochs: 200
+data_path: ../Data/DicData
+lr: 4e-3

@@ -4,6 +4,7 @@ import time
 from collections import defaultdict, deque
 import datetime
 import argparse
+import yaml
 import numpy as np
 from timm.utils import get_state_dict
 
@@ -18,6 +19,12 @@ from models.mobilenet_ae import MobileNetAE
 from models.efficient_ae import EfficientNetAE
 from models.convnext_ae import ConvNextAE
 
+
+def read_yaml_config(yaml_input):
+    with open(yaml_input, "r") as config_file:
+        config_dict = yaml.safe_load(config_file)
+    config = argparse.Namespace(**config_dict)
+    return config
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
