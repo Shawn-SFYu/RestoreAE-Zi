@@ -27,28 +27,38 @@ def read_yaml_config(yaml_input):
     config = argparse.Namespace(**config_dict)
     return config
 
+def overwrite_config(config, args):
+    for key in vars(args):
+        value = getattr(args, key)
+        if value is not None:
+            setattr(config, key, value)
+    return config
+
+def write_yaml_config(config):
+    pass
+
 def get_args_parser():
     parser = argparse.ArgumentParser(
         "Autoencoder training and evaluation script for restoration",
         add_help=False,
     )
-    parser.add_argument("--batch_size", default=32, type=int, help="Per GPU batch size")
-    parser.add_argument("--epochs", default=200, type=int)
-    parser.add_argument(
-        "--update_freq", default=1, type=int, help="gradient accumulation steps"
-    )
+
+    parser.add_argument("-c", "--config", required=True, help="path to yaml config")
+    parser.add_argument("--batch_size", default=None, type=int, help="Per GPU batch size")
+    parser.add_argument("--epochs", default=None, type=int)
 
     # Model parameters
     parser.add_argument(
         "--model",
-        default="mobilenet",
+        default=None,
         type=str,
         metavar="MODEL",
         help="Name of model to train",
     )
     parser.add_argument(
-        "--latent_size", default=512, type=int, help="Latent space size for CAE"
+        "--latent_size", default=None, type=int, help="Latent space size for CAE"
     )
+
     # EMA related parameters
     parser.add_argument("--model_ema", type=bool, default=False)
     parser.add_argument("--model_ema_decay", type=float, default=0.9999, help="")
@@ -59,18 +69,21 @@ def get_args_parser():
         default=False,
         help="Using ema to eval during training.",
     )
+    parser.add_argument(
+        "--update_freq", default=None, type=int, help="gradient accumulation steps"
+    )
 
     # Optimization parameters
     parser.add_argument(
         "--opt",
-        default="adamw",
+        default=None,
         type=str,
         metavar="OPTIMIZER",
         help='Optimizer (default: "adamw"',
     )
     parser.add_argument(
         "--opt_eps",
-        default=1e-8,
+        default=None,
         type=float,
         metavar="EPSILON",
         help="Optimizer Epsilon (default: 1e-8)",
@@ -93,20 +106,18 @@ def get_args_parser():
     parser.add_argument(
         "--momentum",
         type=float,
-        default=0.9,
+        default=None,
         metavar="M",
         help="SGD momentum (default: 0.9)",
     )
     parser.add_argument(
-        "--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)"
+        "--weight_decay", type=float, default=None, help="weight decay (default: 0.05)"
     )
     parser.add_argument(
         "--weight_decay_end",
         type=float,
         default=None,
-        help="""Final value of the
-        weight decay. We use a cosine schedule for WD and using a larger decay by
-        the end of training improves performance for ViTs.""",
+        help="Final value of the weight decay.",
     )
 
     parser.add_argument(
@@ -127,7 +138,7 @@ def get_args_parser():
     parser.add_argument(
         "--warmup_epochs",
         type=int,
-        default=20,
+        default=None,
         metavar="N",
         help="epochs to warmup LR, if scheduler supports",
     )
@@ -141,7 +152,7 @@ def get_args_parser():
 
     # Dataset parameters
     parser.add_argument(
-        "--data_path", default="../Data/DicData", type=str, help="dataset path"
+        "--data_path", default=None, type=str, help="dataset path"
     )
     parser.add_argument(
         "--eval_data_path", default=None, type=str, help="dataset path for evaluation"
@@ -152,6 +163,7 @@ def get_args_parser():
         type=int,
         help="number of the classification types",
     )
+    # need to check
     parser.add_argument(
         "--data_set",
         default="image_folder",
@@ -159,6 +171,7 @@ def get_args_parser():
         type=str,
         help="ImageNet dataset path",
     )
+    # need to check
     parser.add_argument(
         "--output_dir", default="./checkpoint", help="path where to save, empty for no saving"
     )
@@ -168,7 +181,7 @@ def get_args_parser():
     parser.add_argument(
         "--device", default="cuda", help="device to use for training / testing"
     )
-    parser.add_argument("--seed", default=0, type=int)
+    parser.add_argument("--seed", default=None, type=int)
 
     parser.add_argument("--resume", default="", help="resume from checkpoint")
     parser.add_argument("--auto_resume", type=bool, default=True)
@@ -216,7 +229,7 @@ def get_args_parser():
         help="Use PyTorch's AMP (Automatic Mixed Precision) or not",
     )
 
-    # Weights and Biases arguments
+    # Weights and Biases Wandb arguments
     parser.add_argument(
         "--enable_wandb",
         type=bool,
@@ -225,7 +238,7 @@ def get_args_parser():
     )
     parser.add_argument(
         "--project",
-        default="convnext",
+        default=None,
         type=str,
         help="The name of the W&B project where you're sending the new run.",
     )

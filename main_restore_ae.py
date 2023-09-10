@@ -14,7 +14,7 @@ from utils.optim_factory import create_optimizer, LayerDecayValueAssigner
 from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset
 from utils import nn_utils
-from utils.nn_utils import create_model, get_args_parser
+from utils.nn_utils import create_model, get_args_parser, read_yaml_config, overwrite_config
 from utils.nn_utils import NativeScalerWithGradNormCount as NativeScaler
 
 
@@ -334,6 +334,8 @@ if __name__ == "__main__":
         "Autoencoder training and evaluation script for restoration", parents=[get_args_parser()]
     )
     args = parser.parse_args()
+    config = read_yaml_config(args.config)
+    args = overwrite_config(config, args)
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

@@ -4,3 +4,13 @@ batch_size: 32
 epochs: 200
 data_path: ../Data/DicData
 lr: 4e-3
+opt: adamw
+momentum: 0.9
+weight_decay: 0.05 
+
+seed: 0
+output_dir: ./checkpoint
+warmup_epochs: 20
+opt_eps: 1e-8
+update_freq: 1
+clip_grad: None
