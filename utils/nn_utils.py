@@ -30,7 +30,7 @@ def read_yaml_config(yaml_input):
 def overwrite_config(config, args):
     for key in vars(args):
         value = getattr(args, key)
-        if value is not None:
+        if (value is not None) or (not hasattr(config, key)):
             setattr(config, key, value)
     return config
 
