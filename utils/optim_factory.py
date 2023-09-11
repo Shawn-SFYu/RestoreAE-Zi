@@ -7,62 +7,12 @@ from timm.optim.adamp import AdamP
 from timm.optim.lookahead import Lookahead
 from timm.optim.nadam import Nadam
 
-# from timm.optim.novograd import NovoGrad
 from timm.optim.nvnovograd import NvNovoGrad
 from timm.optim.radam import RAdam
 from timm.optim.rmsprop_tf import RMSpropTF
 from timm.optim.sgdp import SGDP
 
 import json
-
-try:
-    from apex.optimizers import FusedNovoGrad, FusedAdam, FusedLAMB, FusedSGD
-
-    has_apex = True
-except ImportError:
-    has_apex = False
-
-
-def get_num_layer_for_convnext(var_name):
-    """
-    Divide [3, 3, 27, 3] layers into 12 groups; each group is three
-    consecutive blocks, including possible neighboring downsample layers;
-    adapted from https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py
-    """
-    num_max_layer = 12
-    if var_name.startswith("downsample_layers"):
-        stage_id = int(var_name.split(".")[1])
-        if stage_id == 0:
-            layer_id = 0
-        elif stage_id == 1 or stage_id == 2:
-            layer_id = stage_id + 1
-        elif stage_id == 3:
-            layer_id = 12
-        return layer_id
-
-    elif var_name.startswith("stages"):
-        stage_id = int(var_name.split(".")[1])
-        block_id = int(var_name.split(".")[2])
-        if stage_id == 0 or stage_id == 1:
-            layer_id = stage_id + 1
-        elif stage_id == 2:
-            layer_id = 3 + block_id // 3
-        elif stage_id == 3:
-            layer_id = 12
-        return layer_id
-    else:
-        return num_max_layer + 1
-
-
-class LayerDecayValueAssigner(object):
-    def __init__(self, values):
-        self.values = values
-
-    def get_scale(self, layer_id):
-        return self.values[layer_id]
-
-    def get_layer_id(self, var_name):
-        return get_num_layer_for_convnext(var_name)
 
 
 def get_parameter_groups(
@@ -134,11 +84,6 @@ def create_optimizer(
     else:
         parameters = model.parameters()
 
-    if "fused" in opt_lower:
-        assert (
-            has_apex and torch.cuda.is_available()
-        ), "APEX and CUDA required for fused optimizers"
-
     opt_args = dict(lr=args.lr, weight_decay=weight_decay)
     if hasattr(args, "opt_eps") and args.opt_eps is not None:
         opt_args["eps"] = args.opt_eps
@@ -187,25 +132,6 @@ def create_optimizer(
     #    optimizer = NovoGrad(parameters, **opt_args)
     elif opt_lower == "nvnovograd":
         optimizer = NvNovoGrad(parameters, **opt_args)
-    elif opt_lower == "fusedsgd":
-        opt_args.pop("eps", None)
-        optimizer = FusedSGD(
-            parameters, momentum=args.momentum, nesterov=True, **opt_args
-        )
-    elif opt_lower == "fusedmomentum":
-        opt_args.pop("eps", None)
-        optimizer = FusedSGD(
-            parameters, momentum=args.momentum, nesterov=False, **opt_args
-        )
-    elif opt_lower == "fusedadam":
-        optimizer = FusedAdam(parameters, adam_w_mode=False, **opt_args)
-    elif opt_lower == "fusedadamw":
-        optimizer = FusedAdam(parameters, adam_w_mode=True, **opt_args)
-    elif opt_lower == "fusedlamb":
-        optimizer = FusedLAMB(parameters, **opt_args)
-    elif opt_lower == "fusednovograd":
-        opt_args.setdefault("betas", (0.95, 0.98))
-        optimizer = FusedNovoGrad(parameters, **opt_args)
     else:
         assert False and "Invalid optimizer"
 

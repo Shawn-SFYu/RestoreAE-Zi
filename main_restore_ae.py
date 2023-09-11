@@ -9,7 +9,7 @@ import os
 
 from pathlib import Path
 from timm.utils import ModelEma
-from utils.optim_factory import create_optimizer, LayerDecayValueAssigner
+from utils.optim_factory import create_optimizer
 
 from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset

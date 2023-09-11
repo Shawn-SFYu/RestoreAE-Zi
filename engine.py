@@ -96,8 +96,9 @@ def train_one_epoch(
                 optimizer.zero_grad()
                 if model_ema is not None:
                     model_ema.update(model)
-
-        torch.cuda.synchronize()
+        
+        if device != 'cpu':
+            torch.cuda.synchronize()
 
         metric_logger.update(loss=loss_value)
         min_lr = 10
