@@ -8,14 +8,12 @@ import yaml
 import os
 
 from pathlib import Path
-from timm.utils import ModelEma
 from utils.optim_factory import create_optimizer
 
 from engine import train_one_epoch, evaluate
 from restore_dataset import build_dataset
 from utils import nn_utils
 from utils.nn_utils import create_model, get_args_parser, read_yaml_config, overwrite_config
-from utils.nn_utils import NativeScalerWithGradNormCount as NativeScaler
 
 
 def main(args):
@@ -92,17 +90,6 @@ def main(args):
     model = create_model(args.model, args.latent_size)
     model.to(device)
 
-    model_ema = None
-    if args.model_ema:
-        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEma(
-            model,
-            decay=args.model_ema_decay,
-            device="cpu" if args.model_ema_force_cpu else "",
-            resume="",
-        )
-        print("Using EMA with decay = %.8f" % args.model_ema_decay)
-
     model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -134,7 +121,6 @@ def main(args):
         filter_bias_and_bn=True,
     )
 
-    loss_scaler = NativeScaler()  # if args.use_amp is False, this won't be used
 
     print("Use Cosine LR scheduler")
     lr_schedule_values = nn_utils.cosine_scheduler(
@@ -166,22 +152,18 @@ def main(args):
         args=args,
         model=model,
         model_without_ddp=model_without_ddp,
-        optimizer=optimizer,
-        loss_scaler=loss_scaler,
-        model_ema=model_ema,
+        optimizer=optimizer
     )
 
     if args.eval:
         print(f"Eval only mode")
-        test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
+        test_stats = evaluate(data_loader_val, model, device)
         print(
             f"Loss of the network on {len(dataset_val)} test images: {test_stats['loss']:.5f}%"
         )
         return
 
     min_loss = np.Inf
-    if args.model_ema and args.model_ema_eval:
-        min_loss_ema = 0.0
 
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
@@ -199,16 +181,13 @@ def main(args):
             optimizer,
             device,
             epoch,
-            loss_scaler,
             args.clip_grad,
-            model_ema,
             log_writer=log_writer,
             start_steps=epoch * num_training_steps_per_epoch,
             lr_schedule_values=lr_schedule_values,
             wd_schedule_values=wd_schedule_values,
             num_training_steps_per_epoch=num_training_steps_per_epoch,
             update_freq=args.update_freq,
-            use_amp=args.use_amp,
         )
         if args.output_dir and args.save_ckpt:
             if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
@@ -217,12 +196,10 @@ def main(args):
                     model=model,
                     model_without_ddp=model_without_ddp,
                     optimizer=optimizer,
-                    loss_scaler=loss_scaler,
                     epoch=epoch,
-                    model_ema=model_ema,
                 )
         if data_loader_val is not None:
-            test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
+            test_stats = evaluate(data_loader_val, model, device)
             print(
                 f"Loss of the model on the {len(dataset_val)} test images: {test_stats['loss']:.4f}%"
             )
@@ -234,9 +211,7 @@ def main(args):
                         model=model,
                         model_without_ddp=model_without_ddp,
                         optimizer=optimizer,
-                        loss_scaler=loss_scaler,
                         epoch="best",
-                        model_ema=model_ema,
                     )
             print(f"Min loss: {min_loss:.2f}%")
 
@@ -249,35 +224,6 @@ def main(args):
                 "epoch": epoch,
                 "n_parameters": n_parameters,
             }
-
-            # repeat testing routines for EMA, if ema eval is turned on
-            if args.model_ema and args.model_ema_eval:
-                test_stats_ema = evaluate(
-                    data_loader_val, model_ema.ema, device, use_amp=args.use_amp
-                )
-                print(
-                    f"Loss of the model EMA on {len(dataset_val)} test images: {test_stats_ema['loss']:.4f}%"
-                )
-                if min_loss_ema < test_stats_ema["loss"]:
-                    min_loss_ema = test_stats_ema["loss"]
-                    if args.output_dir and args.save_ckpt:
-                        nn_utils.save_model(
-                            args=args,
-                            model=model,
-                            model_without_ddp=model_without_ddp,
-                            optimizer=optimizer,
-                            loss_scaler=loss_scaler,
-                            epoch="best-ema",
-                            model_ema=model_ema,
-                        )
-                    print(f"Min EMA loss: {min_loss_ema:.4f}%")
-                if log_writer is not None:
-                    log_writer.update(
-                        test_loss_ema=test_stats_ema["loss"], head="perf", step=epoch
-                    )
-                log_stats.update(
-                    {**{f"test_{k}_ema": v for k, v in test_stats_ema.items()}}
-                )
         else:
             log_stats = {
                 **{f"train_{k}": v for k, v in train_stats.items()},

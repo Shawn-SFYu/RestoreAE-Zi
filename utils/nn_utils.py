@@ -59,16 +59,6 @@ def get_args_parser():
         "--latent_size", default=None, type=int, help="Latent space size for CAE"
     )
 
-    # EMA related parameters
-    parser.add_argument("--model_ema", type=bool, default=False)
-    parser.add_argument("--model_ema_decay", type=float, default=0.9999, help="")
-    parser.add_argument("--model_ema_force_cpu", type=bool, default=False, help="")
-    parser.add_argument(
-        "--model_ema_eval",
-        type=bool,
-        default=False,
-        help="Using ema to eval during training.",
-    )
     parser.add_argument(
         "--update_freq", default=None, type=int, help="gradient accumulation steps"
     )
@@ -220,14 +210,6 @@ def get_args_parser():
     parser.add_argument(
         "--dist_url", default="env://", help="url used to set up distributed training"
     )
-
-    parser.add_argument(
-        "--use_amp",
-        type=bool,
-        default=False,
-        help="Use PyTorch's AMP (Automatic Mixed Precision) or not",
-    )
-
 
     return parser
 
@@ -579,46 +561,6 @@ def load_state_dict(
     if len(error_msgs) > 0:
         print("\n".join(error_msgs))
 
-
-class NativeScalerWithGradNormCount:
-    state_dict_key = "amp_scaler"
-
-    def __init__(self):
-        self._scaler = torch.cuda.amp.GradScaler()
-
-    def __call__(
-        self,
-        loss,
-        optimizer,
-        clip_grad=None,
-        parameters=None,
-        create_graph=False,
-        update_grad=True,
-    ):
-        self._scaler.scale(loss).backward(create_graph=create_graph)
-        if update_grad:
-            if clip_grad is not None:
-                assert parameters is not None
-                self._scaler.unscale_(
-                    optimizer
-                )  # unscale the gradients of optimizer's assigned params in-place
-                norm = torch.nn.utils.clip_grad_norm_(parameters, clip_grad)
-            else:
-                self._scaler.unscale_(optimizer)
-                norm = get_grad_norm_(parameters)
-            self._scaler.step(optimizer)
-            self._scaler.update()
-        else:
-            norm = None
-        return norm
-
-    def state_dict(self):
-        return self._scaler.state_dict()
-
-    def load_state_dict(self, state_dict):
-        self._scaler.load_state_dict(state_dict)
-
-
 def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
     if isinstance(parameters, torch.Tensor):
         parameters = [parameters]
@@ -676,7 +618,7 @@ def cosine_scheduler(
 
 
 def save_model(
-    args, epoch, model, model_without_ddp, optimizer, loss_scaler, model_ema=None
+    args, epoch, model, model_without_ddp, optimizer
 ):
     output_dir = Path(args.output_dir)
     epoch_name = str(epoch)
@@ -686,12 +628,8 @@ def save_model(
             "model": model_without_ddp.state_dict(),
             "optimizer": optimizer.state_dict(),
             "epoch": epoch,
-            "scaler": loss_scaler.state_dict(),
             "args": args,
         }
-
-        if model_ema is not None:
-            to_save["model_ema"] = get_state_dict(model_ema)
 
         save_on_master(to_save, checkpoint_path)
 
@@ -703,7 +641,7 @@ def save_model(
 
 
 def auto_load_model(
-    args, model, model_without_ddp, optimizer, loss_scaler, model_ema=None
+    args, model, model_without_ddp, optimizer
 ):
     output_dir = Path(args.output_dir)
     if args.auto_resume and len(args.resume) == 0:
@@ -736,13 +674,6 @@ def auto_load_model(
                 args.start_epoch = checkpoint["epoch"] + 1
             else:
                 assert args.eval, "Does not support resuming with checkpoint-best"
-            if hasattr(args, "model_ema") and args.model_ema:
-                if "model_ema" in checkpoint.keys():
-                    model_ema.ema.load_state_dict(checkpoint["model_ema"])
-                else:
-                    model_ema.ema.load_state_dict(checkpoint["model"])
-            if "scaler" in checkpoint:
-                loss_scaler.load_state_dict(checkpoint["scaler"])
             print("With optim & sched!")
 
 

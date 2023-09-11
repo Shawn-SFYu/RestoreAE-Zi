@@ -12,16 +12,13 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-    loss_scaler,
     max_norm: float = 0,
-    model_ema: Optional[ModelEma] = None,
     log_writer=None,
     start_steps=None,
     lr_schedule_values=None,
     wd_schedule_values=None,
     num_training_steps_per_epoch=None,
-    update_freq=None,
-    use_amp=False,
+    update_freq=None
 ):
     model.train(True)
     metric_logger = nn_utils.MetricLogger(delimiter="   ")
@@ -57,13 +54,8 @@ def train_one_epoch(
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
-        if use_amp:
-            with torch.cuda.amp.autocast():
-                output = model(samples)
-                loss = criterion(output, targets)
-        else:
-            output = model(samples)
-            loss = criterion(output, targets)
+        output = model(samples)
+        loss = criterion(output, targets)
 
         loss_value = loss.item()
 
@@ -71,31 +63,11 @@ def train_one_epoch(
             print("Loss is {}, stop training".format(loss_value))
             assert math.isfinite(loss_value)
 
-        if use_amp:
-            is_second_order = (
-                hasattr(optimizer, "is_second_order") and optimizer.is_second_order
-            )
-            loss /= update_freq
-            grad_norm = loss_scaler(
-                loss,
-                optimizer,
-                clip_grad=max_norm,
-                parameters=model.parameters(),
-                create_graph=is_second_order,
-                update_grad=(data_iter_step + 1) % update_freq == 0,
-            )
-            if (data_iter_step + 1) % update_freq == 0:
-                optimizer.zero_grad()
-                if model_ema is not None:
-                    model_ema.update(model)
-        else:
-            loss /= update_freq
-            loss.backward()
-            if (data_iter_step + 1) % update_freq == 0:
-                optimizer.step()
-                optimizer.zero_grad()
-                if model_ema is not None:
-                    model_ema.update(model)
+        loss /= update_freq
+        loss.backward()
+        if (data_iter_step + 1) % update_freq == 0:
+            optimizer.step()
+            optimizer.zero_grad()
         
         if device != 'cpu':
             torch.cuda.synchronize()
@@ -114,16 +86,12 @@ def train_one_epoch(
             if group["weight_decay"] > 0:
                 weight_decay_value = group["weight_decay"]
         metric_logger.update(weight_decay=weight_decay_value)
-        if use_amp:
-            metric_logger.update(grad_norm=grad_norm)
 
         if log_writer is not None:
             log_writer.update(loss=loss_value, head="loss")
             log_writer.update(lr=max_lr, head="opt")
             log_writer.update(min_lr=min_lr, head="opt")
             log_writer.update(weight_decay=weight_decay_value, head="opt")
-            if use_amp:
-                log_writer.update(grad_norm=grad_norm, head="opt")
             log_writer.set_step()
 
     # gather the stats from all processes
@@ -133,7 +101,7 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, use_amp=False):
+def evaluate(data_loader, model, device):
     criterion = torch.nn.MSELoss()
 
     metric_logger = nn_utils.MetricLogger(delimiter="  ")
@@ -148,13 +116,8 @@ def evaluate(data_loader, model, device, use_amp=False):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
-        if use_amp:
-            with torch.cuda.amp.autocast():
-                output = model(images)
-                loss = criterion(output, target)
-        else:
-            output = model(images)
-            loss = criterion(output, target)
+        output = model(images)
+        loss = criterion(output, target)
 
         metric_logger.update(loss=loss.item())
 
