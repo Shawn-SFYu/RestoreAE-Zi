@@ -1,4 +1,3 @@
-import torch
 from torch import optim as optim
 
 from timm.optim.adafactor import Adafactor
@@ -12,7 +11,7 @@ from timm.optim.radam import RAdam
 from timm.optim.rmsprop_tf import RMSpropTF
 from timm.optim.sgdp import SGDP
 
-import json
+import yaml
 
 
 def get_parameter_groups(
@@ -55,7 +54,7 @@ def get_parameter_groups(
 
         parameter_group_vars[group_name]["params"].append(param)
         parameter_group_names[group_name]["params"].append(name)
-    print("Param groups = %s" % json.dumps(parameter_group_names, indent=2))
+    print("Param groups = %s" % yaml.dump(parameter_group_names, indent=2))
     return list(parameter_group_vars.values())
 
 

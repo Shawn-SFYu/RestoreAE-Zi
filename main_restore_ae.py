@@ -17,12 +17,11 @@ from utils.nn_utils import create_model, get_args_parser, read_yaml_config, over
 
 
 def main(args):
-    nn_utils.init_distributed_mode(args)
     print(args)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # fix the seed for reproducibility
-    seed = args.seed + nn_utils.get_rank()
+    seed = args.seed
     torch.manual_seed(seed)
     np.random.seed(seed)
     cudnn.benchmark = True
@@ -34,40 +33,24 @@ def main(args):
     else:
         dataset_val, _ = build_dataset(args=args)
 
-    num_tasks = nn_utils.get_world_size()
-    global_rank = nn_utils.get_rank()
-
+    '''
     sampler_train = torch.utils.data.DistributedSampler(
         dataset_train,
-        num_replicas=num_tasks,
-        rank=global_rank,
         shuffle=True,
         seed=args.seed,
     )
     print("Sampler_train = %s" % str(sampler_train))
-    if args.dist_eval:
-        if len(dataset_val) % num_tasks != 0:
-            print(
-                "Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. "
-                "This will slightly alter validation results as extra duplicate entries are added to achieve "
-                "equal num of samples per-process."
-            )
-        sampler_val = torch.utils.data.DistributedSampler(
-            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-    else:
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
-    if global_rank == 0 and args.log_dir is not None:
+    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    '''
+    if args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
         log_writer = nn_utils.TensorboardLogger(log_dir=args.log_dir)
-    else:
-        log_writer = None
 
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train,
-        sampler=sampler_train,
+        # sampler=sampler_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
@@ -78,7 +61,7 @@ def main(args):
     if dataset_val is not None:
         data_loader_val = torch.utils.data.DataLoader(
             dataset_val,
-            sampler=sampler_val,
+            # sampler=sampler_val,
             batch_size=int(1.5 * args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
@@ -90,13 +73,12 @@ def main(args):
     model = create_model(args.model, args.latent_size)
     model.to(device)
 
-    model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    print("Model = %s" % str(model_without_ddp))
+    print("Model = %s" % str(model))
     print("number of params:", n_parameters)
 
-    total_batch_size = args.batch_size * args.update_freq * nn_utils.get_world_size()
+    total_batch_size = args.batch_size * args.update_freq
     num_training_steps_per_epoch = len(dataset_train) // total_batch_size
     print("LR = %.8f" % args.lr)
     print("Batch size = %d" % total_batch_size)
@@ -106,15 +88,9 @@ def main(args):
 
     assigner = None
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.gpu], find_unused_parameters=False
-        )
-        model_without_ddp = model.module
-
     optimizer = create_optimizer(
         args,
-        model_without_ddp,
+        model,
         skip_list=None,
         get_num_layer=assigner.get_layer_id if assigner is not None else None,
         get_layer_scale=assigner.get_scale if assigner is not None else None,
@@ -151,7 +127,6 @@ def main(args):
     nn_utils.auto_load_model(
         args=args,
         model=model,
-        model_without_ddp=model_without_ddp,
         optimizer=optimizer
     )
 
@@ -168,8 +143,6 @@ def main(args):
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
         if log_writer is not None:
             log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
 
@@ -194,7 +167,6 @@ def main(args):
                 nn_utils.save_model(
                     args=args,
                     model=model,
-                    model_without_ddp=model_without_ddp,
                     optimizer=optimizer,
                     epoch=epoch,
                 )
@@ -209,7 +181,6 @@ def main(args):
                     nn_utils.save_model(
                         args=args,
                         model=model,
-                        model_without_ddp=model_without_ddp,
                         optimizer=optimizer,
                         epoch="best",
                     )
@@ -231,13 +202,13 @@ def main(args):
                 "n_parameters": n_parameters,
             }
 
-        if args.output_dir and nn_utils.is_main_process():
+        if args.output_dir:
             if log_writer is not None:
                 log_writer.flush()
             with open(
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
-                f.write(yaml.dumps(log_stats) + "\n")
+                f.write(yaml.dump(log_stats) + "\n")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
