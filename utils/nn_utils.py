@@ -181,10 +181,10 @@ def get_args_parser():
         "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
     )
     parser.add_argument(
-        "--eval", type=bool, default=False, help="Perform evaluation only"
+        "--eval_only", type=bool, default=False, help="Perform evaluation only"
     )
     parser.add_argument(
-        "--dist_eval", type=bool, default=True, help="Enabling distributed evaluation"
+        "--val_ratio", type=float, default=0.1, help="Perform evaluation only"
     )
     parser.add_argument(
         "--disable_eval",

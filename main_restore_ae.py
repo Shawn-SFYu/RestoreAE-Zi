@@ -26,13 +26,17 @@ def main(args):
     np.random.seed(seed)
     cudnn.benchmark = True
 
-    dataset_train, args.nb_classes = build_dataset(args=args)
+    dataset, args.nb_classes = build_dataset(args=args)
+    val_len = int(args.val_ratio * len(dataset))
+    train_len = len(dataset) - val_len
+    dataset_train, dataset_val = torch.utils.data.random_split(dataset, [train_len, val_len])
+    '''
     if args.disable_eval:
         args.dist_eval = False
         dataset_val = None
     else:
         dataset_val, _ = build_dataset(args=args)
-
+    '''
     '''
     sampler_train = torch.utils.data.DistributedSampler(
         dataset_train,
@@ -130,7 +134,7 @@ def main(args):
         optimizer=optimizer
     )
 
-    if args.eval:
+    if args.eval_only:
         print(f"Eval only mode")
         test_stats = evaluate(data_loader_val, model, device)
         print(
