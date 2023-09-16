@@ -12,7 +12,6 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-    max_norm: float = 0,
     log_writer=None,
     start_steps=None,
     lr_schedule_values=None,

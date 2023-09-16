@@ -30,23 +30,7 @@ def main(args):
     val_len = int(args.val_ratio * len(dataset))
     train_len = len(dataset) - val_len
     dataset_train, dataset_val = torch.utils.data.random_split(dataset, [train_len, val_len])
-    '''
-    if args.disable_eval:
-        args.dist_eval = False
-        dataset_val = None
-    else:
-        dataset_val, _ = build_dataset(args=args)
-    '''
-    '''
-    sampler_train = torch.utils.data.DistributedSampler(
-        dataset_train,
-        shuffle=True,
-        seed=args.seed,
-    )
-    print("Sampler_train = %s" % str(sampler_train))
 
-    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-    '''
     if args.log_dir is not None:
         os.makedirs(args.log_dir, exist_ok=True)
         log_writer = nn_utils.TensorboardLogger(log_dir=args.log_dir)
@@ -66,7 +50,7 @@ def main(args):
         data_loader_val = torch.utils.data.DataLoader(
             dataset_val,
             # sampler=sampler_val,
-            batch_size=int(1.5 * args.batch_size),
+            batch_size=int(args.batch_size),
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
             drop_last=False,
