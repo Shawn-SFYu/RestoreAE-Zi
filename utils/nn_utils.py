@@ -11,8 +11,7 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
-
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from models.mobilenet_ae import MobileNetAE
 from models.efficient_ae import EfficientNetAE

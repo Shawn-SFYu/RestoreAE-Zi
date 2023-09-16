@@ -1,7 +1,6 @@
 import math
 import torch
-from timm.utils import ModelEma
-from typing import Iterable, Optional
+from typing import Iterable
 from utils import nn_utils
 
 
@@ -58,12 +57,14 @@ def train_one_epoch(
 
         loss_value = loss.item()
 
-        if not math.isfinite(loss_value):  # this could trigger if using AMP
+        if not math.isfinite(loss_value):  # in case of divergence
             print("Loss is {}, stop training".format(loss_value))
             assert math.isfinite(loss_value)
 
         loss /= update_freq
         loss.backward()
+        
+        # total batch size = update_freq * batch_size
         if (data_iter_step + 1) % update_freq == 0:
             optimizer.step()
             optimizer.zero_grad()
@@ -72,6 +73,8 @@ def train_one_epoch(
             torch.cuda.synchronize()
 
         metric_logger.update(loss=loss_value)
+
+        # lr
         min_lr = 10
         max_lr = 0
         for group in optimizer.param_groups:
@@ -80,12 +83,15 @@ def train_one_epoch(
 
         metric_logger.update(lr=max_lr)
         metric_logger.update(min_lr=min_lr)
+
+        # weight decay
         weight_decay_value = None
         for group in optimizer.param_groups:
             if group["weight_decay"] > 0:
                 weight_decay_value = group["weight_decay"]
         metric_logger.update(weight_decay=weight_decay_value)
 
+        # log writer
         if log_writer is not None:
             log_writer.update(loss=loss_value, head="loss")
             log_writer.update(lr=max_lr, head="opt")
