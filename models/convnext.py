@@ -198,7 +198,7 @@ class InvConvNext(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        if isinstance(m, (nn.Conv2d, nn.Linear)):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
             trunc_normal_(m.weight, std=0.02)
             nn.init.constant_(m.bias, 0)
 
